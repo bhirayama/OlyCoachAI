@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Olympic Movement Pattern Overlay */
+@layer components {
+  .olympic-pattern {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .olympic-pattern::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image:
+      /* Barbell trajectory lines */
+      linear-gradient(135deg, rgba(0, 212, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(45deg, rgba(0, 184, 163, 0.06) 1px, transparent 1px),
+      /* Platform grid pattern */
+      linear-gradient(0deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size:
+      80px 80px,
+      120px 120px,
+      40px 40px,
+      40px 40px;
+    background-position: 0 0, 40px 40px, 0 0, 0 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .olympic-pattern::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(135deg,
+        transparent 30%,
+        rgba(0, 212, 255, 0.03) 50%,
+        transparent 70%);
+    animation: sweep-movement 8s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* CTA Button Styles */
+  .cta-button {
+    @apply bg-gradient-to-r from-orange to-orange-light;
+    @apply text-white font-bold text-lg px-8 py-4 rounded-xl;
+    @apply shadow-glow-orange transition-all duration-300;
+    @apply hover:shadow-xl hover:-translate-y-1;
+    @apply active:translate-y-0 active:shadow-glow-orange;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cta-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent);
+    transition: left 0.5s;
+  }
+
+  .cta-button:hover::before {
+    left: 100%;
+  }
+
+  /* Text Styles */
+  .hero-headline {
+    @apply text-4xl md:text-6xl font-extrabold text-text-primary;
+    @apply leading-tight tracking-tight;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .hero-tagline {
+    @apply text-lg md:text-xl font-semibold text-electric;
+    @apply uppercase tracking-wide;
+  }
+
+  .hero-description {
+    @apply text-base md:text-lg text-text-secondary;
+    @apply leading-relaxed;
+  }
+}
+
+/* Animation delays */
+@layer utilities {
+  .delay-200 {
+    animation-delay: 0.2s;
+  }
+
+  .delay-400 {
+    animation-delay: 0.4s;
+  }
+
+  .delay-600 {
+    animation-delay: 0.6s;
+  }
+}

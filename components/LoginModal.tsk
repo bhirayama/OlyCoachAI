@@ -1,0 +1,231 @@
+// components/LoginModal.tsx
+'use client'
+
+import React, { useState, useEffect } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { motion, AnimatePresence } from 'framer-motion'
+import { X, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react'
+import { useAuthStore } from '@/stores/authStore'
+import { useRouter } from 'next/navigation'
+
+const loginSchema = z.object({
+  email: z.string().email('Please enter a valid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+})
+
+type LoginFormData = z.infer<typeof loginSchema>
+
+interface LoginModalProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
+export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
+  const [showPassword, setShowPassword] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
+  const { signIn } = useAuthStore()
+  const router = useRouter()
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+    reset,
+    setFocus
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    mode: 'onChange'
+  })
+
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => setFocus('email'), 100)
+      setLoginError(null)
+      reset()
+    }
+  }, [isOpen, setFocus, reset])
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) onClose()
+    }
+    
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [isOpen, onClose])
+
+  const onSubmit = async (data: LoginFormData) => {
+    setIsSubmitting(true)
+    setLoginError(null)
+    
+    try {
+      const { error } = await signIn(data.email, data.password)
+
+      if (error) {
+        setLoginError(error)
+        return
+      }
+
+      // Success - close modal and redirect
+      onClose()
+      router.push('/dashboard')
+      
+    } catch (error) {
+      setLoginError('An unexpected error occurred. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+          
+          {/* Modal */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              className="bg-navy-secondary rounded-2xl shadow-2xl w-full max-w-md mx-auto border border-navy-primary/30"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", duration: 0.3 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-navy-primary/30">
+                <h2 className="text-2xl font-bold text-text-primary">Welcome Back</h2>
+                <button
+                  onClick={onClose}
+                  className="p-2 hover:bg-navy-primary/50 rounded-lg transition-colors"
+                  aria-label="Close login modal"
+                >
+                  <X className="w-5 h-5 text-text-secondary" />
+                </button>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
+                
+                {/* Error Alert */}
+                {loginError && (
+                  <motion.div 
+                    className="bg-status-error/10 border border-status-error/20 rounded-lg p-3 flex items-start space-x-2"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <AlertCircle className="w-5 h-5 text-status-error flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-status-error">{loginError}</div>
+                  </motion.div>
+                )}
+
+                {/* Email Field */}
+                <div className="space-y-2">
+                  <label htmlFor="email" className="block text-sm font-medium text-text-secondary">
+                    Email Address
+                  </label>
+                  <input
+                    {...register('email')}
+                    type="email"
+                    autoComplete="email"
+                    className="w-full px-4 py-3 bg-navy-primary/50 border border-navy-primary rounded-lg text-text-primary placeholder-text-disabled focus:ring-2 focus:ring-electric-blue focus:border-transparent transition-colors"
+                    placeholder="your@email.com"
+                  />
+                  {errors.email && (
+                    <p className="text-sm text-status-error">{errors.email.message}</p>
+                  )}
+                </div>
+
+                {/* Password Field */}
+                <div className="space-y-2">
+                  <label htmlFor="password" className="block text-sm font-medium text-text-secondary">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      {...register('password')}
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      className="w-full px-4 py-3 pr-12 bg-navy-primary/50 border border-navy-primary rounded-lg text-text-primary placeholder-text-disabled focus:ring-2 focus:ring-electric-blue focus:border-transparent transition-colors"
+                      placeholder="Enter your password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text-disabled hover:text-text-secondary"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  {errors.password && (
+                    <p className="text-sm text-status-error">{errors.password.message}</p>
+                  )}
+                </div>
+
+                {/* Forgot Password */}
+                <div className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose()
+                      router.push('/auth/forgot-password')
+                    }}
+                    className="text-sm text-electric-blue hover:text-teal-accent transition-colors"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+
+                {/* Submit Button */}
+                <motion.button
+                  type="submit"
+                  disabled={!isValid || isSubmitting}
+                  className="w-full bg-electric-blue hover:bg-electric-blue/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Signing In...</span>
+                    </>
+                  ) : (
+                    <span>Sign In</span>
+                  )}
+                </motion.button>
+
+                {/* Sign Up Link */}
+                <div className="text-center pt-4 border-t border-navy-primary/30">
+                  <p className="text-sm text-text-secondary">
+                    Don't have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose()
+                        router.push('/onboarding')
+                      }}
+                      className="text-electric-blue hover:text-teal-accent transition-colors font-medium"
+                    >
+                      Start your free trial
+                    </button>
+                  </p>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
