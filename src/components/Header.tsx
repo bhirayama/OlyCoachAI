@@ -1,3 +1,4 @@
+// src/components/Header.tsx - Updated to remove manual dashboard navigation
 "use client";
 
 import React, { useState } from 'react';
@@ -10,7 +11,7 @@ interface HeaderProps {
   variant?: 'homepage' | 'dashboard' | 'app';
 }
 
-export const Header: React.FC<HeaderProps> = () => {
+export const Header: React.FC<HeaderProps> = ({ variant = 'homepage' }) => {
   const { loading, signOut, isAuthenticated } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
@@ -62,6 +63,7 @@ export const Header: React.FC<HeaderProps> = () => {
               {loading ? (
                 <div className="w-20 h-10 bg-navy-secondary/50 rounded animate-pulse" />
               ) : isAuthenticated ? (
+                // ✅ DASHBOARD USERS: Only show sign out, no manual dashboard button
                 <button
                   onClick={handleSignOut}
                   disabled={isSigningOut}
@@ -77,6 +79,7 @@ export const Header: React.FC<HeaderProps> = () => {
                   )}
                 </button>
               ) : (
+                // ✅ HOMEPAGE USERS: Show sign in/up buttons
                 <>
                   <button
                     onClick={openSignInModal}

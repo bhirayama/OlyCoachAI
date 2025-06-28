@@ -1,8 +1,7 @@
-// src/app/page.tsx - DEBUG VERSION
+// src/app/page.tsx - Updated to redirect authenticated users automatically
 'use client';
 
-import React, { useState } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthModal } from '@/components/auth/AuthModal';
 
@@ -13,26 +12,24 @@ export default function HomePage() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
-  console.log('🏠 HomePage: Auth state', {
-    user: !!user,
-    loading,
-    isAuthenticated,
-    showAuthModal,
-    authMode
-  });
+  // ✅ FIXED: Auto-redirect authenticated users to dashboard
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      console.log('🏠 HomePage: Authenticated user detected, redirecting to dashboard');
+      window.location.href = '/dashboard';
+    }
+  }, [loading, isAuthenticated]);
 
   const handleSignIn = () => {
     console.log('🏠 HomePage: ✅ Sign In button clicked - opening modal');
     setAuthMode('login');
     setShowAuthModal(true);
-    console.log('🏠 HomePage: Modal state after click', { showAuthModal: true, authMode: 'login' });
   };
 
   const handleSignUp = () => {
     console.log('🏠 HomePage: ✅ Sign Up button clicked - opening modal');
     setAuthMode('signup');
     setShowAuthModal(true);
-    console.log('🏠 HomePage: Modal state after click', { showAuthModal: true, authMode: 'signup' });
   };
 
   const handleSignOut = async () => {
@@ -57,7 +54,17 @@ export default function HomePage() {
     );
   }
 
-  console.log('🏠 HomePage: Rendering main content with modal state:', { showAuthModal, authMode });
+  // ✅ FIXED: Don't render homepage content for authenticated users (they get redirected)
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="text-white text-xl">Redirecting to dashboard...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
@@ -67,43 +74,22 @@ export default function HomePage() {
           OlyCoachAI
         </div>
 
+        {/* ✅ SIMPLIFIED: Only show auth buttons for non-authenticated users */}
         <div className="flex items-center gap-4">
-          {isAuthenticated ? (
-            <>
-              <span className="text-white/80 hidden sm:inline">
-                Welcome, {user?.email}
-              </span>
-              <button
-                onClick={handleSignOut}
-                className="text-white/80 hover:text-white transition-colors px-3 py-2"
-              >
-                Sign Out
-              </button>
-              <Link
-                href="/dashboard"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
-              >
-                Dashboard
-              </Link>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={handleSignIn}
-                className="text-white/80 hover:text-white transition-colors px-4 py-2"
-                data-testid="sign-in-button"
-              >
-                Sign In
-              </button>
-              <button
-                onClick={handleSignUp}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
-                data-testid="start-trial-button"
-              >
-                Start Free Trial
-              </button>
-            </>
-          )}
+          <button
+            onClick={handleSignIn}
+            className="text-white/80 hover:text-white transition-colors px-4 py-2"
+            data-testid="sign-in-button"
+          >
+            Sign In
+          </button>
+          <button
+            onClick={handleSignUp}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
+            data-testid="start-trial-button"
+          >
+            Start Free Trial
+          </button>
         </div>
       </header>
 
@@ -124,38 +110,21 @@ export default function HomePage() {
             Train smarter, lift heavier, achieve your Olympic lifting goals.
           </p>
 
-          {/* CTA Buttons */}
-          {!isAuthenticated ? (
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-              <button
-                onClick={handleSignUp}
-                className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold py-4 px-8 rounded-xl text-lg transition-all transform hover:scale-105 shadow-lg"
-              >
-                Start Free Trial
-              </button>
-              <button
-                onClick={handleSignIn}
-                className="border-2 border-white/20 hover:border-white/40 text-white font-semibold py-4 px-8 rounded-xl text-lg transition-all hover:bg-white/5"
-              >
-                Sign In
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-              <Link
-                href="/dashboard"
-                className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold py-4 px-8 rounded-xl text-lg transition-all transform hover:scale-105 shadow-lg inline-block"
-              >
-                Go to Dashboard
-              </Link>
-              <Link
-                href="/onboarding"
-                className="border-2 border-white/20 hover:border-white/40 text-white font-semibold py-4 px-8 rounded-xl text-lg transition-all hover:bg-white/5 inline-block"
-              >
-                Complete Setup
-              </Link>
-            </div>
-          )}
+          {/* ✅ SIMPLIFIED: Only show signup CTA for non-authenticated users */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
+            <button
+              onClick={handleSignUp}
+              className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold py-4 px-8 rounded-xl text-lg transition-all transform hover:scale-105 shadow-lg"
+            >
+              Start Free Trial
+            </button>
+            <button
+              onClick={handleSignIn}
+              className="border-2 border-white/20 hover:border-white/40 text-white font-semibold py-4 px-8 rounded-xl text-lg transition-all hover:bg-white/5"
+            >
+              Sign In
+            </button>
+          </div>
 
           {/* Feature Cards */}
           <div className="grid md:grid-cols-3 gap-8 mt-20">
@@ -201,18 +170,7 @@ export default function HomePage() {
         />
       </div>
 
-      {/* 🔥 DEBUG: Show modal state in corner */}
-      <div className="fixed top-4 right-4 bg-black/80 text-white p-2 text-xs rounded z-50">
-        Modal: {showAuthModal ? 'OPEN' : 'CLOSED'} | Mode: {authMode}
-      </div>
-
-      {/* Auth Modal - WITH DEBUG */}
-      {console.log('🏠 HomePage: About to render AuthModal with props:', {
-        isOpen: showAuthModal,
-        initialMode: authMode,
-        onClose: 'function exists'
-      })}
-
+      {/* Auth Modal */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={closeModal}

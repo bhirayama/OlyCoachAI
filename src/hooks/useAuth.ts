@@ -1,4 +1,4 @@
-// src/hooks/useAuth.ts
+// src/hooks/useAuth.ts - Enhanced with Email Verification
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -52,17 +52,23 @@ export const useAuth = () => {
         }
 
         const user = session?.user || null;
+
+        // ✅ ENHANCED: Strict email verification check
         const emailConfirmed = user?.email_confirmed_at ? true : false;
         const isAuthenticated = !!user && emailConfirmed;
         const requiresVerification = !!user && !emailConfirmed;
 
-        console.log('🔍 Auth: Initial session state:', {
+        console.log('🔍 Auth: Enhanced verification state:', {
           hasUser: !!user,
           emailConfirmed,
           isAuthenticated,
           requiresVerification,
           email: user?.email,
-          emailConfirmedAt: user?.email_confirmed_at
+          emailConfirmedAt: user?.email_confirmed_at,
+          // ✅ NEW: Detailed verification status
+          verificationStatus: user
+            ? (emailConfirmed ? 'VERIFIED' : 'PENDING_VERIFICATION')
+            : 'NO_USER'
         });
 
         setState({
@@ -100,9 +106,20 @@ export const useAuth = () => {
         });
 
         const user = session?.user || null;
+
+        // ✅ ENHANCED: Consistent verification logic
         const emailConfirmed = user?.email_confirmed_at ? true : false;
         const isAuthenticated = !!user && emailConfirmed;
         const requiresVerification = !!user && !emailConfirmed;
+
+        // ✅ NEW: Special handling for email confirmation events
+        if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+          console.log('🔍 Auth: Checking verification after auth event:', {
+            emailConfirmed,
+            isAuthenticated,
+            requiresVerification
+          });
+        }
 
         setState({
           user,
@@ -150,7 +167,11 @@ export const useAuth = () => {
       console.log('✅ Auth: Sign in successful', {
         emailConfirmed,
         isAuthenticated,
-        requiresVerification
+        requiresVerification,
+        // ✅ NEW: Clear verification messaging
+        nextStep: requiresVerification
+          ? 'SHOW_EMAIL_VERIFICATION'
+          : 'ALLOW_DASHBOARD_ACCESS'
       });
 
       setState(prev => ({
@@ -187,7 +208,7 @@ export const useAuth = () => {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`
+          emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       });
 
@@ -205,7 +226,7 @@ export const useAuth = () => {
       const session = data.session;
 
       if (user && !session) {
-        // Email confirmation required
+        // ✅ ENHANCED: Email confirmation required
         console.log('🔐 Auth: Sign up successful - email confirmation required');
         setState(prev => ({
           ...prev,
@@ -218,7 +239,7 @@ export const useAuth = () => {
         }));
         return {
           success: true,
-          error: 'Please check your email to confirm your account before signing in.'
+          error: 'CHECK_EMAIL' // Special flag for UI handling
         };
       }
 
@@ -288,6 +309,7 @@ export const useAuth = () => {
     }
   };
 
+  // ✅ ENHANCED: Better resend verification with user feedback
   const resendVerification = async (): Promise<AuthResult> => {
     if (!state.user?.email) {
       console.error('❌ Auth: No email found for resend verification');
@@ -301,7 +323,7 @@ export const useAuth = () => {
         type: 'signup',
         email: state.user.email,
         options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`
+          emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       });
 
@@ -316,6 +338,54 @@ export const useAuth = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to resend verification email';
       console.error('❌ Auth: Resend verification error:', errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  // ✅ NEW: Check verification status manually (for refresh scenarios)
+  const checkVerificationStatus = async (): Promise<AuthResult> => {
+    console.log('🔐 Auth: Manually checking verification status');
+
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error('❌ Auth: Verification check failed:', error.message);
+        return { success: false, error: error.message };
+      }
+
+      const user = session?.user;
+      if (!user) {
+        console.log('🔐 Auth: No user found during verification check');
+        return { success: false, error: 'No user session found' };
+      }
+
+      const emailConfirmed = user.email_confirmed_at ? true : false;
+      const isAuthenticated = emailConfirmed;
+      const requiresVerification = !emailConfirmed;
+
+      console.log('🔍 Auth: Verification status check:', {
+        emailConfirmed,
+        isAuthenticated,
+        requiresVerification
+      });
+
+      setState(prev => ({
+        ...prev,
+        user,
+        emailConfirmed,
+        isAuthenticated,
+        requiresVerification
+      }));
+
+      return {
+        success: true,
+        error: emailConfirmed ? undefined : 'Email verification still required'
+      };
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Verification check failed';
+      console.error('❌ Auth: Verification check error:', errorMessage);
       return { success: false, error: errorMessage };
     }
   };
@@ -381,7 +451,7 @@ export const useAuth = () => {
     loading: state.loading,
     error: state.error,
 
-    // Email verification state
+    // ✅ ENHANCED: Clear verification state
     emailConfirmed: state.emailConfirmed,
     isAuthenticated: state.isAuthenticated,
     requiresVerification: state.requiresVerification,
@@ -392,7 +462,10 @@ export const useAuth = () => {
     signOut,
     resendVerification,
     clearError,
-    refreshSession
+    refreshSession,
+
+    // ✅ NEW: Additional verification methods
+    checkVerificationStatus
   };
 };
 
