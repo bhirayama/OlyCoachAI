@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { Header } from '@/components/Header';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { DashboardProtectedRoute } from '@/components/ProtectedRoute'; // ADD THIS IMPORT
 import { useAuth } from '@/hooks/useAuth';
 
 const DashboardContent: React.FC = () => {
@@ -74,14 +74,15 @@ export default function DashboardPage() {
     return () => window.removeEventListener('popstate', handleRouteChange);
   }, [user, loading]);
 
+  // ✅ WRAP THE ENTIRE RETURN WITH PROTECTION
   return (
-    <ProtectedRoute requireAuth={true}>
+    <DashboardProtectedRoute>
       <div className="min-h-screen bg-navy-primary">
         <Header variant="dashboard" />
         <main>
           <DashboardContent />
         </main>
       </div>
-    </ProtectedRoute>
+    </DashboardProtectedRoute>
   );
 }

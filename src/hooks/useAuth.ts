@@ -1,3 +1,4 @@
+// src/hooks/useAuth.ts
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -9,13 +10,27 @@ interface AuthResult {
   error?: string;
 }
 
+interface AuthState {
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+  emailConfirmed: boolean;
+  isAuthenticated: boolean;
+  requiresVerification: boolean;
+}
+
 export const useAuth = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<AuthState>({
+    user: null,
+    loading: true,
+    error: null,
+    emailConfirmed: false,
+    isAuthenticated: false,
+    requiresVerification: false
+  });
 
   useEffect(() => {
-    console.log('🔐 Auth Debug: Initializing');
+    console.log('🔐 Auth: Initializing auth state check');
 
     // Get initial session
     const getInitialSession = async () => {
@@ -23,17 +38,53 @@ export const useAuth = () => {
         const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error) {
-          console.log('🔐 Auth Debug: Session error', error.message);
-          setError(error.message);
-        } else {
-          console.log('🔐 Auth Debug: Initial session', { user: !!session?.user });
-          setUser(session?.user ?? null);
+          console.error('❌ Auth: Session error:', error);
+          setState(prev => ({
+            ...prev,
+            loading: false,
+            error: error.message,
+            user: null,
+            emailConfirmed: false,
+            isAuthenticated: false,
+            requiresVerification: false
+          }));
+          return;
         }
+
+        const user = session?.user || null;
+        const emailConfirmed = user?.email_confirmed_at ? true : false;
+        const isAuthenticated = !!user && emailConfirmed;
+        const requiresVerification = !!user && !emailConfirmed;
+
+        console.log('🔍 Auth: Initial session state:', {
+          hasUser: !!user,
+          emailConfirmed,
+          isAuthenticated,
+          requiresVerification,
+          email: user?.email,
+          emailConfirmedAt: user?.email_confirmed_at
+        });
+
+        setState({
+          user,
+          loading: false,
+          error: null,
+          emailConfirmed,
+          isAuthenticated,
+          requiresVerification
+        });
+
       } catch (err) {
-        console.log('🔐 Auth Debug: Initialization failed', err);
-        setError('Failed to initialize auth');
-      } finally {
-        setLoading(false);
+        console.error('❌ Auth: Initialization failed:', err);
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          error: 'Failed to initialize authentication',
+          user: null,
+          emailConfirmed: false,
+          isAuthenticated: false,
+          requiresVerification: false
+        }));
       }
     };
 
@@ -41,50 +92,96 @@ export const useAuth = () => {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('🔐 Auth Debug: State change', { event, user: !!session?.user });
-        setUser(session?.user ?? null);
-        setError(null);
-        setLoading(false);
+      async (event, session) => {
+        console.log('🔐 Auth: State change event:', event, {
+          hasUser: !!session?.user,
+          email: session?.user?.email,
+          emailConfirmedAt: session?.user?.email_confirmed_at
+        });
+
+        const user = session?.user || null;
+        const emailConfirmed = user?.email_confirmed_at ? true : false;
+        const isAuthenticated = !!user && emailConfirmed;
+        const requiresVerification = !!user && !emailConfirmed;
+
+        setState({
+          user,
+          loading: false,
+          error: null,
+          emailConfirmed,
+          isAuthenticated,
+          requiresVerification
+        });
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      console.log('🔐 Auth: Cleaning up auth listener');
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string): Promise<AuthResult> => {
-    console.log('🔐 Auth Debug: Sign in attempt', { email });
+    console.log('🔐 Auth: Sign in attempt for:', email);
 
     try {
-      setError(null);
+      setState(prev => ({ ...prev, error: null, loading: true }));
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
       if (error) {
-        console.log('🔐 Auth Debug: Sign in failed', error.message);
-        setError(error.message);
+        console.error('❌ Auth: Sign in failed:', error.message);
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          error: error.message
+        }));
         return { success: false, error: error.message };
       }
 
-      console.log('🔐 Auth Debug: Sign in success');
+      const user = data.user;
+      const emailConfirmed = user?.email_confirmed_at ? true : false;
+      const isAuthenticated = !!user && emailConfirmed;
+      const requiresVerification = !!user && !emailConfirmed;
+
+      console.log('✅ Auth: Sign in successful', {
+        emailConfirmed,
+        isAuthenticated,
+        requiresVerification
+      });
+
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        user,
+        emailConfirmed,
+        isAuthenticated,
+        requiresVerification,
+        error: null
+      }));
+
       return { success: true };
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Sign in failed';
-      console.log('🔐 Auth Debug: Sign in error', errorMessage);
-      setError(errorMessage);
+      console.error('❌ Auth: Sign in error:', errorMessage);
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: errorMessage
+      }));
       return { success: false, error: errorMessage };
     }
   };
 
   const signUp = async (email: string, password: string): Promise<AuthResult> => {
-    console.log('🔐 Auth Debug: Sign up attempt', { email });
+    console.log('🔐 Auth: Sign up attempt for:', email);
 
     try {
-      setError(null);
+      setState(prev => ({ ...prev, error: null, loading: true }));
 
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -95,44 +192,88 @@ export const useAuth = () => {
       });
 
       if (error) {
-        console.log('🔐 Auth Debug: Sign up failed', error.message);
-        setError(error.message);
+        console.error('❌ Auth: Sign up failed:', error.message);
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          error: error.message
+        }));
         return { success: false, error: error.message };
       }
 
-      if (data.user && !data.session) {
-        console.log('🔐 Auth Debug: Sign up success - email confirmation required');
-        return { success: true, error: 'Please check your email to confirm your account' };
+      const user = data.user;
+      const session = data.session;
+
+      if (user && !session) {
+        // Email confirmation required
+        console.log('🔐 Auth: Sign up successful - email confirmation required');
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          user,
+          emailConfirmed: false,
+          isAuthenticated: false,
+          requiresVerification: true,
+          error: null
+        }));
+        return {
+          success: true,
+          error: 'Please check your email to confirm your account before signing in.'
+        };
       }
 
-      console.log('🔐 Auth Debug: Sign up success - auto confirmed');
+      // Auto-confirmed (development mode)
+      console.log('✅ Auth: Sign up successful - auto confirmed');
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        user,
+        emailConfirmed: true,
+        isAuthenticated: true,
+        requiresVerification: false,
+        error: null
+      }));
+
       return { success: true };
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Sign up failed';
-      console.log('🔐 Auth Debug: Sign up error', errorMessage);
-      setError(errorMessage);
+      console.error('❌ Auth: Sign up error:', errorMessage);
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: errorMessage
+      }));
       return { success: false, error: errorMessage };
     }
   };
 
   const signOut = async (): Promise<AuthResult> => {
-    console.log('🔐 Auth Debug: Sign out initiated');
+    console.log('🔐 Auth: Sign out initiated');
 
     try {
-      setError(null);
+      setState(prev => ({ ...prev, error: null }));
 
       const { error } = await supabase.auth.signOut();
 
       if (error) {
-        console.log('🔐 Auth Debug: Sign out failed', error.message);
-        setError(error.message);
+        console.error('❌ Auth: Sign out failed:', error.message);
+        setState(prev => ({ ...prev, error: error.message }));
         return { success: false, error: error.message };
       }
 
-      console.log('🔐 Auth Debug: Sign out success');
+      console.log('✅ Auth: Sign out successful');
 
-      // Simple redirect - no circuit breaker
+      setState({
+        user: null,
+        loading: false,
+        error: null,
+        emailConfirmed: false,
+        isAuthenticated: false,
+        requiresVerification: false
+      });
+
+      // Simple redirect after state update
       setTimeout(() => {
         window.location.href = '/';
       }, 100);
@@ -141,24 +282,119 @@ export const useAuth = () => {
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Sign out failed';
-      console.log('🔐 Auth Debug: Sign out error', errorMessage);
-      setError(errorMessage);
+      console.error('❌ Auth: Sign out error:', errorMessage);
+      setState(prev => ({ ...prev, error: errorMessage }));
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  const resendVerification = async (): Promise<AuthResult> => {
+    if (!state.user?.email) {
+      console.error('❌ Auth: No email found for resend verification');
+      return { success: false, error: 'No email address found' };
+    }
+
+    console.log('🔐 Auth: Resending verification email to:', state.user.email);
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: state.user.email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`
+        }
+      });
+
+      if (error) {
+        console.error('❌ Auth: Resend verification failed:', error.message);
+        return { success: false, error: error.message };
+      }
+
+      console.log('✅ Auth: Verification email resent successfully');
+      return { success: true };
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to resend verification email';
+      console.error('❌ Auth: Resend verification error:', errorMessage);
       return { success: false, error: errorMessage };
     }
   };
 
   const clearError = () => {
-    setError(null);
+    console.log('🔐 Auth: Clearing error state');
+    setState(prev => ({ ...prev, error: null }));
   };
 
+  const refreshSession = async (): Promise<AuthResult> => {
+    console.log('🔐 Auth: Refreshing session');
+
+    try {
+      setState(prev => ({ ...prev, loading: true }));
+
+      const { data, error } = await supabase.auth.refreshSession();
+
+      if (error) {
+        console.error('❌ Auth: Session refresh failed:', error.message);
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          error: error.message
+        }));
+        return { success: false, error: error.message };
+      }
+
+      const user = data.session?.user || null;
+      const emailConfirmed = user?.email_confirmed_at ? true : false;
+      const isAuthenticated = !!user && emailConfirmed;
+      const requiresVerification = !!user && !emailConfirmed;
+
+      console.log('✅ Auth: Session refreshed successfully');
+
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        user,
+        emailConfirmed,
+        isAuthenticated,
+        requiresVerification,
+        error: null
+      }));
+
+      return { success: true };
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Session refresh failed';
+      console.error('❌ Auth: Session refresh error:', errorMessage);
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: errorMessage
+      }));
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  // Return all auth state and methods
   return {
-    user,
-    loading,
-    error,
+    // Core state
+    user: state.user,
+    loading: state.loading,
+    error: state.error,
+
+    // Email verification state
+    emailConfirmed: state.emailConfirmed,
+    isAuthenticated: state.isAuthenticated,
+    requiresVerification: state.requiresVerification,
+
+    // Auth methods
     signIn,
     signUp,
     signOut,
+    resendVerification,
     clearError,
-    isAuthenticated: !!user
+    refreshSession
   };
 };
+
+// Export types for use in other components
+export type { AuthResult };

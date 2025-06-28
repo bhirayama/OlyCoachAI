@@ -1,12 +1,15 @@
+// src/components/ProtectedRoute.tsx
 "use client";
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { EmailVerification } from '@/components/auth/EmailVerification';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   redirectTo?: string;
   requireAuth?: boolean;
+  requireEmailVerification?: boolean;
 }
 
 const LoadingSpinner: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => {
@@ -19,7 +22,7 @@ const LoadingSpinner: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }
   return (
     <div className="flex items-center justify-center">
       <div
-        className={`border-electric/30 border-t-electric rounded-full animate-spin ${sizeClasses[size]}`}
+        className={`border-electric-blue/30 border-t-electric-blue rounded-full animate-spin ${sizeClasses[size]}`}
       />
     </div>
   );
@@ -28,19 +31,24 @@ const LoadingSpinner: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   redirectTo = '/',
-  requireAuth = true
+  requireAuth = true,
+  requireEmailVerification = true
 }) => {
-  const { user, loading, error } = useAuth();
+  const { user, loading, error, isAuthenticated, requiresVerification } = useAuth();
   const [shouldRender, setShouldRender] = useState(false);
   const [redirectAttempted, setRedirectAttempted] = useState(false);
 
   useEffect(() => {
     console.log('🛡️ ProtectedRoute: State check', {
       hasUser: !!user,
+      isAuthenticated,
+      requiresVerification,
       loading,
       requireAuth,
+      requireEmailVerification,
       redirectAttempted,
-      currentPath: window.location.pathname
+      currentPath: window.location.pathname,
+      emailConfirmed: user?.email_confirmed_at ? 'yes' : 'no'
     });
 
     // Don't do anything while loading
@@ -63,15 +71,20 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           window.location.href = redirectTo;
         }, 50);
       }
-    } else if (requireAuth && user) {
-      console.log('🛡️ ProtectedRoute: User authenticated, rendering content');
+    } else if (requireAuth && user && requireEmailVerification && requiresVerification) {
+      console.log('🛡️ ProtectedRoute: User exists but email verification required');
+      // Don't redirect, but don't render children either - EmailVerification will be shown
+      setShouldRender(false);
+      setRedirectAttempted(false);
+    } else if (requireAuth && isAuthenticated) {
+      console.log('🛡️ ProtectedRoute: User fully authenticated and verified, rendering content');
       setShouldRender(true);
       setRedirectAttempted(false);
     } else if (!requireAuth) {
       console.log('🛡️ ProtectedRoute: Public route, rendering content');
       setShouldRender(true);
     }
-  }, [user, loading, redirectTo, requireAuth, redirectAttempted]);
+  }, [user, loading, isAuthenticated, requiresVerification, redirectTo, requireAuth, requireEmailVerification, redirectAttempted]);
 
   // Show loading while auth initializes
   if (loading) {
@@ -99,13 +112,19 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
               setRedirectAttempted(false);
               window.location.reload();
             }}
-            className="bg-electric text-white px-4 py-2 rounded hover:bg-electric/90"
+            className="bg-electric-blue hover:bg-electric-blue/90 text-white px-4 py-2 rounded-lg transition-colors"
           >
             Retry
           </button>
         </div>
       </div>
     );
+  }
+
+  // Show email verification if user exists but email not verified
+  if (requireAuth && user && requireEmailVerification && requiresVerification) {
+    console.log('🛡️ ProtectedRoute: 📧 Showing email verification screen');
+    return <EmailVerification />;
   }
 
   // Show loading if redirect is in progress
@@ -131,4 +150,42 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   console.log('🛡️ ProtectedRoute: ✅ Rendering protected content');
   return <>{children}</>;
+};
+
+// Convenience wrapper for dashboard routes that require full verification
+export const DashboardProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return (
+    <ProtectedRoute
+      requireAuth={true}
+      requireEmailVerification={true}
+      redirectTo="/"
+    >
+      {children}
+    </ProtectedRoute>
+  );
+};
+
+// Convenience wrapper for routes that only require auth (no email verification)
+export const AuthProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return (
+    <ProtectedRoute
+      requireAuth={true}
+      requireEmailVerification={false}
+      redirectTo="/"
+    >
+      {children}
+    </ProtectedRoute>
+  );
+};
+
+// Public route wrapper (no protection)
+export const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return (
+    <ProtectedRoute
+      requireAuth={false}
+      requireEmailVerification={false}
+    >
+      {children}
+    </ProtectedRoute>
+  );
 };

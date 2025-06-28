@@ -1,302 +1,128 @@
-"use client";
-
-import React, { useState, useEffect } from 'react';
-import { X, Eye, EyeOff, Mail, Lock, User } from 'lucide-react';
+// src/components/auth/AuthModal.tsx - UPDATE existing file
+import React, { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
-interface AuthModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  initialMode?: 'login' | 'signup';
-}
-
-export const AuthModal: React.FC<AuthModalProps> = ({
-  isOpen,
-  onClose,
-  initialMode = 'login'
-}) => {
-  const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
-  const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    firstName: '',
-    lastName: ''
-  });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const { signIn, signUp, error, clearError } = useAuth();
-
-  useEffect(() => {
-    if (isOpen) {
-      setMode(initialMode);
-      setFormData({ email: '', password: '', firstName: '', lastName: '' });
-      setFormErrors({});
-      setShowPassword(false);
-      clearError();
-    }
-  }, [isOpen, initialMode, clearError]);
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
-
-  const validateForm = () => {
-    const errors: Record<string, string> = {};
-
-    if (!formData.email) {
-      errors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      errors.email = 'Please enter a valid email';
-    }
-
-    if (!formData.password) {
-      errors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      errors.password = 'Password must be at least 8 characters';
-    }
-
-    if (mode === 'signup') {
-      if (!formData.firstName.trim()) {
-        errors.firstName = 'First name is required';
-      }
-      if (!formData.lastName.trim()) {
-        errors.lastName = 'Last name is required';
-      }
-    }
-
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
+export const AuthModal: React.FC = () => {
+  const { signUp, signIn, error, loading } = useAuth();
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showVerificationMessage, setShowVerificationMessage] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) return;
-
-    setIsSubmitting(true);
-
-    try {
-      let result;
-
-      if (mode === 'login') {
-        result = await signIn(formData.email, formData.password);
-
-        if (result.success) {
-          console.log('🔐 Auth Debug: Login successful, redirecting');
-          onClose();
-          // Simple redirect to dashboard
-          setTimeout(() => {
-            window.location.href = '/dashboard';
-          }, 100);
-        } else {
-          setFormErrors({ submit: result.error || 'Login failed' });
-        }
-      } else {
-        result = await signUp(formData.email, formData.password);
-
-        if (result.success) {
-          if (result.error) {
-            // Email confirmation required
-            setFormErrors({ submit: result.error });
-          } else {
-            console.log('🔐 Auth Debug: Signup successful, redirecting');
-            onClose();
-            setTimeout(() => {
-              window.location.href = '/dashboard';
-            }, 100);
-          }
-        } else {
-          setFormErrors({ submit: result.error || 'Signup failed' });
-        }
+    if (isSignUp) {
+      const result = await signUp(email, password);
+      if (result.success && result.requiresVerification) {
+        setShowVerificationMessage(true);
       }
-    } catch (err) {
-      console.error('🔐 Auth Debug: Form submission error', err);
-      setFormErrors({
-        submit: err instanceof Error ? err.message : 'An unexpected error occurred'
-      });
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      await signIn(email, password);
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (formErrors[field]) {
-      setFormErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
-
-  const switchMode = () => {
-    setMode(mode === 'login' ? 'signup' : 'login');
-    setFormErrors({});
-    setFormData(prev => ({ ...prev, firstName: '', lastName: '' }));
-    clearError();
-  };
-
-  if (!isOpen) return null;
+  // Show verification message after successful signup
+  if (showVerificationMessage) {
+    return (
+      <div className="min-h-screen bg-navy-primary flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-navy-secondary/50 backdrop-blur-sm rounded-xl p-8 text-center space-y-6">
+          <div className="w-16 h-16 bg-electric-blue/20 rounded-full flex items-center justify-center mx-auto">
+            <svg className="w-8 h-8 text-electric-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-text-primary">Account Created!</h2>
+          <p className="text-text-secondary">
+            Please check your email and click the verification link to continue.
+          </p>
+          <button
+            onClick={() => setShowVerificationMessage(false)}
+            className="text-electric-blue hover:text-electric-blue/80 text-sm font-medium"
+          >
+            Back to Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-      data-testid="auth-modal"
-    >
-      <div className="w-full max-w-md bg-navy-secondary rounded-xl shadow-2xl transform transition-all">
+    <div className="min-h-screen bg-navy-primary flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-navy-secondary/50 backdrop-blur-sm rounded-xl p-8 space-y-8">
 
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-navy-primary/20">
-          <h2 className="text-xl font-bold text-text-primary">
-            {mode === 'login' ? 'Welcome Back' : 'Create Account'}
-          </h2>
+        <div className="text-center space-y-2">
+          <h1 className="text-3xl font-bold text-text-primary">
+            OLYMPIC WEIGHTLIFTING AI
+          </h1>
+          <p className="text-electric-blue text-sm font-semibold uppercase tracking-wide">
+            AI Coaching That Adapts
+          </p>
+        </div>
+
+        {/* Auth Form */}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-2">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-navy-primary border border-navy-primary rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric-blue focus:border-transparent"
+                placeholder="Enter your email"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-text-secondary mb-2">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-navy-primary border border-navy-primary rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric-blue focus:border-transparent"
+                placeholder="Enter your password"
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div className="text-red-400 text-sm text-center">
+              {error}
+            </div>
+          )}
+
           <button
-            onClick={onClose}
-            className="p-1 text-text-disabled hover:text-text-primary transition-colors"
-            aria-label="Close modal"
+            type="submit"
+            disabled={loading}
+            className="w-full bg-action-orange hover:bg-action-orange/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg transition-colors duration-200"
           >
-            <X className="w-5 h-5" />
+            {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
+          </button>
+        </form>
+
+        {/* Toggle Sign Up/Sign In */}
+        <div className="text-center">
+          <p className="text-text-disabled text-sm">
+            {isSignUp ? 'Already have an account?' : "Don't have an account?"}
+          </p>
+          <button
+            onClick={() => setIsSignUp(!isSignUp)}
+            className="text-electric-blue hover:text-electric-blue/80 font-medium mt-1 transition-colors duration-200"
+          >
+            {isSignUp ? 'Sign In' : 'Sign Up'}
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-
-          {/* Error Display */}
-          {(error || formErrors.submit) && (
-            <div className="p-3 bg-error/10 border border-error/20 rounded-lg">
-              <p className="text-sm text-error">{error || formErrors.submit}</p>
-            </div>
-          )}
-
-          {/* Name fields for signup */}
-          {mode === 'signup' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">
-                  First Name
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text-disabled" />
-                  <input
-                    type="text"
-                    value={formData.firstName}
-                    onChange={(e) => handleInputChange('firstName', e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric focus:border-transparent"
-                    placeholder="John"
-                  />
-                </div>
-                {formErrors.firstName && (
-                  <p className="text-xs text-error mt-1">{formErrors.firstName}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">
-                  Last Name
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text-disabled" />
-                  <input
-                    type="text"
-                    value={formData.lastName}
-                    onChange={(e) => handleInputChange('lastName', e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric focus:border-transparent"
-                    placeholder="Doe"
-                  />
-                </div>
-                {formErrors.lastName && (
-                  <p className="text-xs text-error mt-1">{formErrors.lastName}</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Email field */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Email
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text-disabled" />
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleInputChange('email', e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric focus:border-transparent"
-                placeholder="john@example.com"
-                data-testid="email-input"
-              />
-            </div>
-            {formErrors.email && (
-              <p className="text-xs text-error mt-1">{formErrors.email}</p>
-            )}
-          </div>
-
-          {/* Password field */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text-disabled" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={formData.password}
-                onChange={(e) => handleInputChange('password', e.target.value)}
-                className="w-full pl-10 pr-12 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric focus:border-transparent"
-                placeholder="••••••••"
-                data-testid="password-input"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text-disabled hover:text-text-primary"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            {formErrors.password && (
-              <p className="text-xs text-error mt-1">{formErrors.password}</p>
-            )}
-          </div>
-
-          {/* Submit button */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-electric hover:bg-electric/90 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
-            data-testid="submit-button"
-          >
-            {isSubmitting ? (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-            ) : (
-              mode === 'login' ? 'Sign In' : 'Create Account'
-            )}
-          </button>
-
-          {/* Mode switch */}
-          <div className="text-center">
-            <p className="text-sm text-text-disabled">
-              {mode === 'login' ? "Don't have an account? " : "Already have an account? "}
-              <button
-                type="button"
-                onClick={switchMode}
-                className="text-electric hover:text-electric/80 font-medium"
-                data-testid="switch-mode-button"
-              >
-                {mode === 'login' ? 'Sign up' : 'Sign in'}
-              </button>
-            </p>
-          </div>
-        </form>
       </div>
     </div>
   );

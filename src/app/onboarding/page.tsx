@@ -3,8 +3,9 @@
 import React from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { DashboardProtectedRoute } from '@/components/ProtectedRoute'; // ADD THIS IMPORT
 
-export default function OnboardingPage() {
+const OnboardingContent: React.FC = () => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -14,12 +15,6 @@ export default function OnboardingPage() {
         <p className="mt-4 text-text-secondary">Loading onboarding...</p>
       </div>
     );
-  }
-
-  if (!user) {
-    // Redirect to home if not authenticated
-    window.location.href = '/';
-    return null;
   }
 
   return (
@@ -42,5 +37,14 @@ export default function OnboardingPage() {
         </div>
       </div>
     </div>
+  );
+};
+
+export default function OnboardingPage() {
+  // ✅ WRAP THE ENTIRE RETURN WITH PROTECTION
+  return (
+    <DashboardProtectedRoute>
+      <OnboardingContent />
+    </DashboardProtectedRoute>
   );
 }
