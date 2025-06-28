@@ -1,8 +1,8 @@
-// lib/supabase.ts - FIXED FOR APP ROUTER
+// lib/supabase.ts - Enhanced for SSR and code exchange
 import { createBrowserClient } from '@supabase/ssr';
 import type { User, Session } from '@supabase/supabase-js';
 
-// Keep all your existing type definitions exactly as they are
+// Keep all your existing type definitions
 export type Database = {
   public: {
     Tables: {
@@ -107,8 +107,45 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-// ✅ FIXED: Use createBrowserClient with proper cookie handling
+// ✅ ENHANCED: Browser client with better configuration
 export const supabase = createBrowserClient<Database>(
   supabaseUrl,
-  supabaseKey
+  supabaseKey,
+  {
+    // ✅ NEW: Better cookie handling for auth
+    cookies: {
+      get: (name: string) => {
+        if (typeof document !== 'undefined') {
+          const cookies = document.cookie.split(';');
+          for (const cookie of cookies) {
+            const [key, value] = cookie.trim().split('=');
+            if (key === name) {
+              return decodeURIComponent(value);
+            }
+          }
+        }
+        return undefined;
+      },
+      set: (name: string, value: string, options?: any) => {
+        if (typeof document !== 'undefined') {
+          let cookieString = `${name}=${encodeURIComponent(value)}`;
+          if (options?.maxAge) cookieString += `; max-age=${options.maxAge}`;
+          if (options?.path) cookieString += `; path=${options.path}`;
+          if (options?.domain) cookieString += `; domain=${options.domain}`;
+          if (options?.secure) cookieString += `; secure`;
+          if (options?.httpOnly) cookieString += `; httponly`;
+          if (options?.sameSite) cookieString += `; samesite=${options.sameSite}`;
+          document.cookie = cookieString;
+        }
+      },
+      remove: (name: string, options?: any) => {
+        if (typeof document !== 'undefined') {
+          let cookieString = `${name}=; max-age=0`;
+          if (options?.path) cookieString += `; path=${options.path}`;
+          if (options?.domain) cookieString += `; domain=${options.domain}`;
+          document.cookie = cookieString;
+        }
+      }
+    }
+  }
 );

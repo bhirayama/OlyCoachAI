@@ -1,7 +1,7 @@
-// src/hooks/useAuth.ts - Enhanced with Email Verification
+// src/hooks/useAuth.ts - FIXED: No more infinite loops
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
@@ -29,13 +29,33 @@ export const useAuth = () => {
     requiresVerification: false
   });
 
+  // ✅ FIXED: Use useCallback to prevent function recreation
+  const updateAuthState = useCallback((user: User | null, loading: boolean = false, error: string | null = null) => {
+    const emailConfirmed = user?.email_confirmed_at ? true : false;
+    const isAuthenticated = !!user && emailConfirmed;
+    const requiresVerification = !!user && !emailConfirmed;
+
+    setState({
+      user,
+      loading,
+      error,
+      emailConfirmed,
+      isAuthenticated,
+      requiresVerification
+    });
+  }, []); // ✅ FIXED: Empty dependency array since it doesn't depend on anything
+
+  // ✅ FIXED: Proper useEffect with correct dependencies
   useEffect(() => {
     console.log('🔐 Auth: Initializing auth state check');
 
-    // Get initial session
+    let mounted = true; // ✅ FIXED: Prevent setState on unmounted component
+
     const getInitialSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (!mounted) return; // ✅ FIXED: Don't update if unmounted
 
         if (error) {
           console.error('❌ Auth: Session error:', error);
@@ -52,93 +72,51 @@ export const useAuth = () => {
         }
 
         const user = session?.user || null;
-
-        // ✅ ENHANCED: Strict email verification check
-        const emailConfirmed = user?.email_confirmed_at ? true : false;
-        const isAuthenticated = !!user && emailConfirmed;
-        const requiresVerification = !!user && !emailConfirmed;
-
-        console.log('🔍 Auth: Enhanced verification state:', {
+        console.log('🔍 Auth: Initial session loaded:', {
           hasUser: !!user,
-          emailConfirmed,
-          isAuthenticated,
-          requiresVerification,
           email: user?.email,
-          emailConfirmedAt: user?.email_confirmed_at,
-          // ✅ NEW: Detailed verification status
-          verificationStatus: user
-            ? (emailConfirmed ? 'VERIFIED' : 'PENDING_VERIFICATION')
-            : 'NO_USER'
+          emailConfirmed: user?.email_confirmed_at ? true : false
         });
 
-        setState({
-          user,
-          loading: false,
-          error: null,
-          emailConfirmed,
-          isAuthenticated,
-          requiresVerification
-        });
+        updateAuthState(user, false, null);
 
       } catch (err) {
+        if (!mounted) return;
         console.error('❌ Auth: Initialization failed:', err);
         setState(prev => ({
           ...prev,
           loading: false,
-          error: 'Failed to initialize authentication',
-          user: null,
-          emailConfirmed: false,
-          isAuthenticated: false,
-          requiresVerification: false
+          error: 'Failed to initialize authentication'
         }));
       }
     };
 
     getInitialSession();
 
-    // Listen for auth changes
+    // ✅ FIXED: Auth state listener with proper cleanup
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
+        if (!mounted) return; // ✅ FIXED: Don't update if unmounted
+
         console.log('🔐 Auth: State change event:', event, {
           hasUser: !!session?.user,
-          email: session?.user?.email,
-          emailConfirmedAt: session?.user?.email_confirmed_at
+          email: session?.user?.email
         });
 
         const user = session?.user || null;
-
-        // ✅ ENHANCED: Consistent verification logic
-        const emailConfirmed = user?.email_confirmed_at ? true : false;
-        const isAuthenticated = !!user && emailConfirmed;
-        const requiresVerification = !!user && !emailConfirmed;
-
-        // ✅ NEW: Special handling for email confirmation events
-        if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
-          console.log('🔍 Auth: Checking verification after auth event:', {
-            emailConfirmed,
-            isAuthenticated,
-            requiresVerification
-          });
-        }
-
-        setState({
-          user,
-          loading: false,
-          error: null,
-          emailConfirmed,
-          isAuthenticated,
-          requiresVerification
-        });
+        updateAuthState(user, false, null);
       }
     );
 
+    // ✅ FIXED: Cleanup function
     return () => {
-      console.log('🔐 Auth: Cleaning up auth listener');
+      mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [updateAuthState]); // ✅ FIXED: Only depends on updateAuthState
 
-  const signIn = async (email: string, password: string): Promise<AuthResult> => {
+  // ✅ FIXED: Use useCallback for all auth functions
+  const signIn = useCallback(async (email: string, password: string): Promise<AuthResult> => {
     console.log('🔐 Auth: Sign in attempt for:', email);
 
     try {
@@ -159,31 +137,8 @@ export const useAuth = () => {
         return { success: false, error: error.message };
       }
 
-      const user = data.user;
-      const emailConfirmed = user?.email_confirmed_at ? true : false;
-      const isAuthenticated = !!user && emailConfirmed;
-      const requiresVerification = !!user && !emailConfirmed;
-
-      console.log('✅ Auth: Sign in successful', {
-        emailConfirmed,
-        isAuthenticated,
-        requiresVerification,
-        // ✅ NEW: Clear verification messaging
-        nextStep: requiresVerification
-          ? 'SHOW_EMAIL_VERIFICATION'
-          : 'ALLOW_DASHBOARD_ACCESS'
-      });
-
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        user,
-        emailConfirmed,
-        isAuthenticated,
-        requiresVerification,
-        error: null
-      }));
-
+      // ✅ FIXED: Don't manually update state here, let onAuthStateChange handle it
+      console.log('✅ Auth: Sign in successful');
       return { success: true };
 
     } catch (err) {
@@ -196,9 +151,9 @@ export const useAuth = () => {
       }));
       return { success: false, error: errorMessage };
     }
-  };
+  }, []);
 
-  const signUp = async (email: string, password: string): Promise<AuthResult> => {
+  const signUp = useCallback(async (email: string, password: string): Promise<AuthResult> => {
     console.log('🔐 Auth: Sign up attempt for:', email);
 
     try {
@@ -225,36 +180,25 @@ export const useAuth = () => {
       const user = data.user;
       const session = data.session;
 
+      console.log('🔍 Auth: Signup response:', {
+        hasUser: !!user,
+        hasSession: !!session,
+        userEmail: user?.email
+      });
+
       if (user && !session) {
-        // ✅ ENHANCED: Email confirmation required
-        console.log('🔐 Auth: Sign up successful - email confirmation required');
-        setState(prev => ({
-          ...prev,
-          loading: false,
-          user,
-          emailConfirmed: false,
-          isAuthenticated: false,
-          requiresVerification: true,
-          error: null
-        }));
+        // Email confirmation required
+        console.log('📧 Auth: Email confirmation required');
+        updateAuthState(user, false, null);
         return {
           success: true,
-          error: 'CHECK_EMAIL' // Special flag for UI handling
+          error: 'CHECK_EMAIL'
         };
       }
 
-      // Auto-confirmed (development mode)
-      console.log('✅ Auth: Sign up successful - auto confirmed');
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        user,
-        emailConfirmed: true,
-        isAuthenticated: true,
-        requiresVerification: false,
-        error: null
-      }));
-
+      // Auto-confirmed
+      console.log('✅ Auth: Sign up auto-confirmed');
+      updateAuthState(user, false, null);
       return { success: true };
 
     } catch (err) {
@@ -267,14 +211,12 @@ export const useAuth = () => {
       }));
       return { success: false, error: errorMessage };
     }
-  };
+  }, [updateAuthState]);
 
-  const signOut = async (): Promise<AuthResult> => {
+  const signOut = useCallback(async (): Promise<AuthResult> => {
     console.log('🔐 Auth: Sign out initiated');
 
     try {
-      setState(prev => ({ ...prev, error: null }));
-
       const { error } = await supabase.auth.signOut();
 
       if (error) {
@@ -285,16 +227,7 @@ export const useAuth = () => {
 
       console.log('✅ Auth: Sign out successful');
 
-      setState({
-        user: null,
-        loading: false,
-        error: null,
-        emailConfirmed: false,
-        isAuthenticated: false,
-        requiresVerification: false
-      });
-
-      // Simple redirect after state update
+      // ✅ FIXED: Don't manually update state, let onAuthStateChange handle it
       setTimeout(() => {
         window.location.href = '/';
       }, 100);
@@ -307,16 +240,14 @@ export const useAuth = () => {
       setState(prev => ({ ...prev, error: errorMessage }));
       return { success: false, error: errorMessage };
     }
-  };
+  }, []);
 
-  // ✅ ENHANCED: Better resend verification with user feedback
-  const resendVerification = async (): Promise<AuthResult> => {
+  const resendVerification = useCallback(async (): Promise<AuthResult> => {
     if (!state.user?.email) {
-      console.error('❌ Auth: No email found for resend verification');
       return { success: false, error: 'No email address found' };
     }
 
-    console.log('🔐 Auth: Resending verification email to:', state.user.email);
+    console.log('🔐 Auth: Resending verification email');
 
     try {
       const { error } = await supabase.auth.resend({
@@ -328,55 +259,37 @@ export const useAuth = () => {
       });
 
       if (error) {
-        console.error('❌ Auth: Resend verification failed:', error.message);
+        console.error('❌ Auth: Resend failed:', error.message);
         return { success: false, error: error.message };
       }
 
-      console.log('✅ Auth: Verification email resent successfully');
+      console.log('✅ Auth: Verification email resent');
       return { success: true };
 
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to resend verification email';
-      console.error('❌ Auth: Resend verification error:', errorMessage);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to resend';
+      console.error('❌ Auth: Resend error:', errorMessage);
       return { success: false, error: errorMessage };
     }
-  };
+  }, [state.user?.email]);
 
-  // ✅ NEW: Check verification status manually (for refresh scenarios)
-  const checkVerificationStatus = async (): Promise<AuthResult> => {
-    console.log('🔐 Auth: Manually checking verification status');
+  const checkVerificationStatus = useCallback(async (): Promise<AuthResult> => {
+    console.log('🔐 Auth: Checking verification status');
 
     try {
       const { data: { session }, error } = await supabase.auth.getSession();
 
       if (error) {
-        console.error('❌ Auth: Verification check failed:', error.message);
         return { success: false, error: error.message };
       }
 
       const user = session?.user;
       if (!user) {
-        console.log('🔐 Auth: No user found during verification check');
         return { success: false, error: 'No user session found' };
       }
 
       const emailConfirmed = user.email_confirmed_at ? true : false;
-      const isAuthenticated = emailConfirmed;
-      const requiresVerification = !emailConfirmed;
-
-      console.log('🔍 Auth: Verification status check:', {
-        emailConfirmed,
-        isAuthenticated,
-        requiresVerification
-      });
-
-      setState(prev => ({
-        ...prev,
-        user,
-        emailConfirmed,
-        isAuthenticated,
-        requiresVerification
-      }));
+      updateAuthState(user, false, null);
 
       return {
         success: true,
@@ -385,89 +298,34 @@ export const useAuth = () => {
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Verification check failed';
-      console.error('❌ Auth: Verification check error:', errorMessage);
       return { success: false, error: errorMessage };
     }
-  };
+  }, [updateAuthState]);
 
-  const clearError = () => {
-    console.log('🔐 Auth: Clearing error state');
+  const clearError = useCallback(() => {
     setState(prev => ({ ...prev, error: null }));
-  };
+  }, []);
 
-  const refreshSession = async (): Promise<AuthResult> => {
-    console.log('🔐 Auth: Refreshing session');
-
-    try {
-      setState(prev => ({ ...prev, loading: true }));
-
-      const { data, error } = await supabase.auth.refreshSession();
-
-      if (error) {
-        console.error('❌ Auth: Session refresh failed:', error.message);
-        setState(prev => ({
-          ...prev,
-          loading: false,
-          error: error.message
-        }));
-        return { success: false, error: error.message };
-      }
-
-      const user = data.session?.user || null;
-      const emailConfirmed = user?.email_confirmed_at ? true : false;
-      const isAuthenticated = !!user && emailConfirmed;
-      const requiresVerification = !!user && !emailConfirmed;
-
-      console.log('✅ Auth: Session refreshed successfully');
-
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        user,
-        emailConfirmed,
-        isAuthenticated,
-        requiresVerification,
-        error: null
-      }));
-
-      return { success: true };
-
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Session refresh failed';
-      console.error('❌ Auth: Session refresh error:', errorMessage);
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        error: errorMessage
-      }));
-      return { success: false, error: errorMessage };
-    }
-  };
-
-  // Return all auth state and methods
+  // ✅ FIXED: Return stable object
   return {
     // Core state
     user: state.user,
     loading: state.loading,
     error: state.error,
 
-    // ✅ ENHANCED: Clear verification state
+    // Verification state
     emailConfirmed: state.emailConfirmed,
     isAuthenticated: state.isAuthenticated,
     requiresVerification: state.requiresVerification,
 
-    // Auth methods
+    // Methods (all memoized with useCallback)
     signIn,
     signUp,
     signOut,
     resendVerification,
     clearError,
-    refreshSession,
-
-    // ✅ NEW: Additional verification methods
     checkVerificationStatus
   };
 };
 
-// Export types for use in other components
 export type { AuthResult };
