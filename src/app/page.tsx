@@ -1,3 +1,4 @@
+// src/app/page.tsx - DEBUG VERSION
 'use client';
 
 import React, { useState } from 'react';
@@ -12,18 +13,26 @@ export default function HomePage() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
-  console.log('🏠 HomePage: Auth state', { user: !!user, loading, isAuthenticated });
+  console.log('🏠 HomePage: Auth state', {
+    user: !!user,
+    loading,
+    isAuthenticated,
+    showAuthModal,
+    authMode
+  });
 
   const handleSignIn = () => {
-    console.log('🏠 HomePage: Opening sign in modal');
+    console.log('🏠 HomePage: ✅ Sign In button clicked - opening modal');
     setAuthMode('login');
     setShowAuthModal(true);
+    console.log('🏠 HomePage: Modal state after click', { showAuthModal: true, authMode: 'login' });
   };
 
   const handleSignUp = () => {
-    console.log('🏠 HomePage: Opening sign up modal');
+    console.log('🏠 HomePage: ✅ Sign Up button clicked - opening modal');
     setAuthMode('signup');
     setShowAuthModal(true);
+    console.log('🏠 HomePage: Modal state after click', { showAuthModal: true, authMode: 'signup' });
   };
 
   const handleSignOut = async () => {
@@ -32,7 +41,7 @@ export default function HomePage() {
   };
 
   const closeModal = () => {
-    console.log('🏠 HomePage: Closing auth modal');
+    console.log('🏠 HomePage: ✅ Closing auth modal');
     setShowAuthModal(false);
   };
 
@@ -47,6 +56,8 @@ export default function HomePage() {
       </div>
     );
   }
+
+  console.log('🏠 HomePage: Rendering main content with modal state:', { showAuthModal, authMode });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
@@ -190,14 +201,23 @@ export default function HomePage() {
         />
       </div>
 
-      {/* Auth Modal */}
-      {showAuthModal && (
-        <AuthModal
-          isOpen={showAuthModal}
-          onClose={closeModal}
-          initialMode={authMode}
-        />
-      )}
+      {/* 🔥 DEBUG: Show modal state in corner */}
+      <div className="fixed top-4 right-4 bg-black/80 text-white p-2 text-xs rounded z-50">
+        Modal: {showAuthModal ? 'OPEN' : 'CLOSED'} | Mode: {authMode}
+      </div>
+
+      {/* Auth Modal - WITH DEBUG */}
+      {console.log('🏠 HomePage: About to render AuthModal with props:', {
+        isOpen: showAuthModal,
+        initialMode: authMode,
+        onClose: 'function exists'
+      })}
+
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={closeModal}
+        initialMode={authMode}
+      />
     </div>
   );
 }
