@@ -47,7 +47,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
       requireAuth,
       requireEmailVerification,
       redirectAttempted,
-      currentPath: window.location.pathname,
+      currentPath: typeof window !== 'undefined' ? window.location.pathname : 'SSR',
       emailConfirmed: user?.email_confirmed_at ? 'yes' : 'no'
     });
 
@@ -62,7 +62,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
       console.log('🛡️ ProtectedRoute: Auth required but no user found');
       setShouldRender(false);
 
-      if (!redirectAttempted) {
+      if (!redirectAttempted && typeof window !== 'undefined') {
         console.log('🛡️ ProtectedRoute: Attempting redirect to:', redirectTo);
         setRedirectAttempted(true);
 
@@ -110,7 +110,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           <button
             onClick={() => {
               setRedirectAttempted(false);
-              window.location.reload();
+              if (typeof window !== 'undefined') {
+                window.location.reload();
+              }
             }}
             className="bg-electric-blue hover:bg-electric-blue/90 text-white px-4 py-2 rounded-lg transition-colors"
           >
@@ -178,7 +180,7 @@ export const AuthProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 };
 
-// Public route wrapper (no protection)
+// Public route wrapper (no protection) - FIXED EXPORT
 export const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <ProtectedRoute
