@@ -3,46 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { X, Eye, EyeOff, Mail, Lock, User } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { circuitBreaker } from '@/utils/redirectCircuitBreaker';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialMode?: 'login' | 'signup';
 }
-
-const Button: React.FC<{
-  children: React.ReactNode;
-  onClick?: () => void;
-  type?: 'button' | 'submit';
-  disabled?: boolean;
-  variant?: 'primary' | 'ghost';
-  className?: string;
-}> = ({
-  children,
-  onClick,
-  type = 'button',
-  disabled = false,
-  variant = 'primary',
-  className = ''
-}) => {
-    const baseClasses = "px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-electric-blue";
-    const variantClasses = {
-      primary: "bg-electric-blue text-white hover:bg-electric-blue/90 disabled:opacity-50",
-      ghost: "bg-transparent text-text-secondary hover:text-text-primary hover:bg-white/10"
-    };
-
-    return (
-      <button
-        type={type}
-        onClick={onClick}
-        disabled={disabled}
-        className={`${baseClasses} ${variantClasses[variant]} ${className}`}
-      >
-        {children}
-      </button>
-    );
-  };
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
@@ -60,7 +26,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { signIn, loading } = useAuth();
+  const { signIn, signUp, error, clearError } = useAuth();
 
   useEffect(() => {
     if (isOpen) {
@@ -68,8 +34,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setFormData({ email: '', password: '', firstName: '', lastName: '' });
       setFormErrors({});
       setShowPassword(false);
+      clearError();
     }
-  }, [isOpen, initialMode]);
+  }, [isOpen, initialMode, clearError]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -118,38 +85,43 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsSubmitting(true);
 
     try {
+      let result;
+
       if (mode === 'login') {
-        const result = await signIn(formData.email, formData.password);
+        result = await signIn(formData.email, formData.password);
 
         if (result.success) {
-          console.log('✅ Login successful in modal');
+          console.log('🔐 Auth Debug: Login successful, redirecting');
           onClose();
-
-          // Use circuit breaker for login redirect
-          const currentPath = window.location.pathname;
-          if (currentPath === '/' || currentPath.startsWith('/auth')) {
-            if (circuitBreaker.logRedirect('/dashboard', 'AuthModal-login')) {
-              setTimeout(() => {
-                window.location.href = '/dashboard';
-              }, 100);
-            }
-          }
-
+          // Simple redirect to dashboard
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 100);
         } else {
-          setFormErrors({ submit: result.error || 'Sign in failed' });
+          setFormErrors({ submit: result.error || 'Login failed' });
         }
       } else {
-        console.log('✅ Signup flow initiated');
-        onClose();
+        result = await signUp(formData.email, formData.password);
 
-        if (circuitBreaker.logRedirect('/onboarding', 'AuthModal-signup')) {
-          window.location.href = '/onboarding';
+        if (result.success) {
+          if (result.error) {
+            // Email confirmation required
+            setFormErrors({ submit: result.error });
+          } else {
+            console.log('🔐 Auth Debug: Signup successful, redirecting');
+            onClose();
+            setTimeout(() => {
+              window.location.href = '/dashboard';
+            }, 100);
+          }
+        } else {
+          setFormErrors({ submit: result.error || 'Signup failed' });
         }
       }
-    } catch (error) {
-      console.error('❌ Auth error:', error);
+    } catch (err) {
+      console.error('🔐 Auth Debug: Form submission error', err);
       setFormErrors({
-        submit: error instanceof Error ? error.message : 'An unexpected error occurred'
+        submit: err instanceof Error ? err.message : 'An unexpected error occurred'
       });
     } finally {
       setIsSubmitting(false);
@@ -167,6 +139,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setMode(mode === 'login' ? 'signup' : 'login');
     setFormErrors({});
     setFormData(prev => ({ ...prev, firstName: '', lastName: '' }));
+    clearError();
   };
 
   if (!isOpen) return null;
@@ -179,6 +152,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     >
       <div className="w-full max-w-md bg-navy-secondary rounded-xl shadow-2xl transform transition-all">
 
+        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-navy-primary/20">
           <h2 className="text-xl font-bold text-text-primary">
             {mode === 'login' ? 'Welcome Back' : 'Create Account'}
@@ -187,14 +161,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             onClick={onClose}
             className="p-1 text-text-disabled hover:text-text-primary transition-colors"
             aria-label="Close modal"
-            data-testid="close-modal-button"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
+        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
 
+          {/* Error Display */}
+          {(error || formErrors.submit) && (
+            <div className="p-3 bg-error/10 border border-error/20 rounded-lg">
+              <p className="text-sm text-error">{error || formErrors.submit}</p>
+            </div>
+          )}
+
+          {/* Name fields for signup */}
           {mode === 'signup' && (
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -207,12 +189,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     type="text"
                     value={formData.firstName}
                     onChange={(e) => handleInputChange('firstName', e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric-blue focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric focus:border-transparent"
                     placeholder="John"
                   />
                 </div>
                 {formErrors.firstName && (
-                  <p className="text-xs text-status-error mt-1">{formErrors.firstName}</p>
+                  <p className="text-xs text-error mt-1">{formErrors.firstName}</p>
                 )}
               </div>
 
@@ -226,17 +208,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     type="text"
                     value={formData.lastName}
                     onChange={(e) => handleInputChange('lastName', e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric-blue focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric focus:border-transparent"
                     placeholder="Doe"
                   />
                 </div>
                 {formErrors.lastName && (
-                  <p className="text-xs text-status-error mt-1">{formErrors.lastName}</p>
+                  <p className="text-xs text-error mt-1">{formErrors.lastName}</p>
                 )}
               </div>
             </div>
           )}
 
+          {/* Email field */}
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1">
               Email
@@ -247,16 +230,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="email"
                 value={formData.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric-blue focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric focus:border-transparent"
                 placeholder="john@example.com"
                 data-testid="email-input"
               />
             </div>
             {formErrors.email && (
-              <p className="text-xs text-status-error mt-1">{formErrors.email}</p>
+              <p className="text-xs text-error mt-1">{formErrors.email}</p>
             )}
           </div>
 
+          {/* Password field */}
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1">
               Password
@@ -267,7 +251,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={(e) => handleInputChange('password', e.target.value)}
-                className="w-full pl-10 pr-12 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric-blue focus:border-transparent"
+                className="w-full pl-10 pr-12 py-2 bg-navy-primary border border-navy-primary/50 rounded-lg text-text-primary placeholder-text-disabled focus:outline-none focus:ring-2 focus:ring-electric focus:border-transparent"
                 placeholder="••••••••"
                 data-testid="password-input"
               />
@@ -280,36 +264,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
             </div>
             {formErrors.password && (
-              <p className="text-xs text-status-error mt-1">{formErrors.password}</p>
+              <p className="text-xs text-error mt-1">{formErrors.password}</p>
             )}
           </div>
 
-          {formErrors.submit && (
-            <div className="p-3 bg-status-error/10 border border-status-error/20 rounded-lg">
-              <p className="text-sm text-status-error">{formErrors.submit}</p>
-            </div>
-          )}
-
-          <Button
+          {/* Submit button */}
+          <button
             type="submit"
-            disabled={isSubmitting || loading}
-            className="w-full bg-electric-blue hover:bg-electric-blue/90"
+            disabled={isSubmitting}
+            className="w-full bg-electric hover:bg-electric/90 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
             data-testid="submit-button"
           >
             {isSubmitting ? (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
             ) : (
               mode === 'login' ? 'Sign In' : 'Create Account'
             )}
-          </Button>
+          </button>
 
+          {/* Mode switch */}
           <div className="text-center">
             <p className="text-sm text-text-disabled">
               {mode === 'login' ? "Don't have an account? " : "Already have an account? "}
               <button
                 type="button"
                 onClick={switchMode}
-                className="text-electric-blue hover:text-electric-blue/80 font-medium"
+                className="text-electric hover:text-electric/80 font-medium"
                 data-testid="switch-mode-button"
               >
                 {mode === 'login' ? 'Sign up' : 'Sign in'}

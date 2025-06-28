@@ -1,24 +1,23 @@
-// app/dashboard/DashboardClient.tsx
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useEffect } from 'react';
 
 export const DashboardClient: React.FC = () => {
-  const { user, loading, isAuthenticated, redirectToHome } = useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
 
-  // SIMPLE route protection
+  // Simple route protection
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       console.log('🔒 Not authenticated, redirecting to home');
-      redirectToHome();
+      window.location.href = '/';
     }
-  }, [loading, isAuthenticated, redirectToHome]);
+  }, [loading, isAuthenticated]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 border-4 border-electric-blue/30 border-t-electric-blue rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-electric/30 border-t-electric rounded-full animate-spin" />
       </div>
     );
   }

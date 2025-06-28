@@ -2,19 +2,18 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth'; // Updated import
-import { AuthModal } from '@/components/AuthModal';
-import { Menu, X, User, LogOut } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { AuthModal } from '@/components/auth/AuthModal';
+import { LogOut } from 'lucide-react';
 
 interface HeaderProps {
   variant?: 'homepage' | 'dashboard' | 'app';
 }
 
-export const Header: React.FC<HeaderProps> = ({ variant = 'homepage' }) => {
-  const { user, loading, signOut, isAuthenticated } = useAuth(); // Updated usage
+export const Header: React.FC<HeaderProps> = () => {
+  const { loading, signOut, isAuthenticated } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const handleSignOut = async () => {
@@ -22,7 +21,7 @@ export const Header: React.FC<HeaderProps> = ({ variant = 'homepage' }) => {
     try {
       const result = await signOut();
       if (!result.success) {
-        console.error('Sign out failed:', result.error);
+        console.error('🔐 Header: Sign out failed:', result.error);
       }
     } finally {
       setIsSigningOut(false);
@@ -32,16 +31,13 @@ export const Header: React.FC<HeaderProps> = ({ variant = 'homepage' }) => {
   const openSignInModal = () => {
     setAuthModalMode('login');
     setIsAuthModalOpen(true);
-    setIsMobileMenuOpen(false);
   };
 
   const openSignUpModal = () => {
     setAuthModalMode('signup');
     setIsAuthModalOpen(true);
-    setIsMobileMenuOpen(false);
   };
 
-  // Rest of your Header component...
   return (
     <>
       <header className="sticky top-0 z-50 bg-navy-primary/95 backdrop-blur-sm border-b border-navy-secondary/50">
@@ -53,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({ variant = 'homepage' }) => {
               href={isAuthenticated ? "/dashboard" : "/"}
               className="flex items-center space-x-2"
             >
-              <div className="w-8 h-8 bg-electric-blue rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-electric rounded-lg flex items-center justify-center">
                 <span className="text-navy-primary font-bold text-sm">OW</span>
               </div>
               <span className="text-text-primary font-bold text-lg">
@@ -61,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({ variant = 'homepage' }) => {
               </span>
             </Link>
 
-            {/* Auth buttons based on state */}
+            {/* Auth buttons */}
             <div className="flex items-center space-x-4">
               {loading ? (
                 <div className="w-20 h-10 bg-navy-secondary/50 rounded animate-pulse" />
@@ -91,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({ variant = 'homepage' }) => {
                   </button>
                   <button
                     onClick={openSignUpModal}
-                    className="bg-action-orange hover:bg-action-orange/90 text-white px-4 py-2 rounded-lg transition-colors"
+                    className="bg-orange hover:bg-orange/90 text-white px-4 py-2 rounded-lg transition-colors"
                     data-testid="start-trial-button"
                   >
                     Start Free Trial
@@ -103,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({ variant = 'homepage' }) => {
         </div>
       </header>
 
-      {/* Auth Modal */}
+      {/* Single Auth Modal */}
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}

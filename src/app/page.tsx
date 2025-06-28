@@ -1,30 +1,33 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Header } from '@/components/Header';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
-import { LoginModal } from '@/components/LoginModal';
-import { SignupModal } from '@/components/SignupModal';
+import { AuthModal } from '@/components/auth/AuthModal';
 
 export default function Home() {
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [showSignupModal, setShowSignupModal] = useState(false);
-  const { user, isAuthenticated, initialize, signOut } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const { user, isAuthenticated, signOut } = useAuth();
 
-
-  const handleSwitchToSignup = () => {
-    setShowLoginModal(false);
-    setShowSignupModal(true);
+  const handleSignIn = () => {
+    setAuthMode('login');
+    setShowAuthModal(true);
   };
 
-  const handleSwitchToLogin = () => {
-    setShowSignupModal(false);
-    setShowLoginModal(true);
+  const handleSignUp = () => {
+    setAuthMode('signup');
+    setShowAuthModal(true);
+  };
+
+  const handleSignOut = async () => {
+    console.log('🔐 Auth Debug: Homepage sign out');
+    await signOut();
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+
       {/* Header */}
       <header className="relative z-10 flex justify-between items-center p-6">
         <div className="text-2xl font-bold text-white">
@@ -36,23 +39,31 @@ export default function Home() {
             <>
               <span className="text-white/80">Welcome, {user?.email}</span>
               <button
-                onClick={signOut}
+                onClick={handleSignOut}
                 className="text-white/80 hover:text-white transition-colors"
               >
                 Sign Out
               </button>
+              <a
+                href="/dashboard"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
+              >
+                Dashboard
+              </a>
             </>
           ) : (
             <>
               <button
-                onClick={() => setShowLoginModal(true)}
+                onClick={handleSignIn}
                 className="text-white/80 hover:text-white transition-colors px-4 py-2"
+                data-testid="sign-in-button"
               >
                 Sign In
               </button>
               <button
-                onClick={() => setShowSignupModal(true)}
+                onClick={handleSignUp}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
+                data-testid="start-trial-button"
               >
                 Start Free Trial
               </button>
@@ -69,9 +80,9 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             className="text-5xl md:text-7xl font-bold text-white mb-6"
           >
-            Smarter Sets
+            Olympic Weightlifting
             <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-              Start Here
+              Powered by AI
             </span>
           </motion.h1>
 
@@ -81,8 +92,8 @@ export default function Home() {
             transition={{ delay: 0.1 }}
             className="text-xl text-slate-300 mb-8 max-w-2xl mx-auto"
           >
-            Dynamic programming built around your daily lives.
-            Train smarter, lift heavier, achieve your weightlifting goals.
+            Real-time coaching that adapts to your daily performance.
+            Train smarter, lift heavier, achieve your Olympic lifting goals.
           </motion.p>
 
           {!isAuthenticated && (
@@ -93,33 +104,49 @@ export default function Home() {
               className="flex flex-col sm:flex-row gap-4 justify-center"
             >
               <button
-                onClick={() => setShowSignupModal(true)}
+                onClick={handleSignUp}
                 className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold py-4 px-8 rounded-xl text-lg transition-all transform hover:scale-105"
               >
                 Start Free Trial
               </button>
               <button
-                onClick={() => setShowLoginModal(true)}
+                onClick={handleSignIn}
                 className="border-2 border-white/20 hover:border-white/40 text-white font-semibold py-4 px-8 rounded-xl text-lg transition-all"
               >
                 Sign In
               </button>
             </motion.div>
           )}
+
+          {isAuthenticated && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="flex flex-col sm:flex-row gap-4 justify-center"
+            >
+              <a
+                href="/dashboard"
+                className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold py-4 px-8 rounded-xl text-lg transition-all transform hover:scale-105"
+              >
+                Go to Dashboard
+              </a>
+              <a
+                href="/onboarding"
+                className="border-2 border-white/20 hover:border-white/40 text-white font-semibold py-4 px-8 rounded-xl text-lg transition-all"
+              >
+                Complete Setup
+              </a>
+            </motion.div>
+          )}
         </div>
       </main>
 
-      {/* Modals */}
-      <LoginModal
-        isOpen={showLoginModal}
-        onClose={() => setShowLoginModal(false)}
-        onSwitchToSignup={handleSwitchToSignup}
-      />
-
-      <SignupModal
-        isOpen={showSignupModal}
-        onClose={() => setShowSignupModal(false)}
-        onSwitchToLogin={handleSwitchToLogin}
+      {/* Single Auth Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        initialMode={authMode}
       />
     </div>
   );

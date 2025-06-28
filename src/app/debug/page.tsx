@@ -3,8 +3,18 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
+interface DebugState {
+  envVars: {
+    url: boolean;
+    key: boolean;
+  };
+  session: object | null;
+  profile: object | null;
+  error: string | null;
+}
+
 export default function DebugPage() {
-  const [debug, setDebug] = useState({
+  const [debug, setDebug] = useState<DebugState>({
     envVars: {
       url: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
       key: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY

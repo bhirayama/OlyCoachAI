@@ -6,7 +6,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/hooks/useAuth';
 
 const DashboardContent: React.FC = () => {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -56,13 +56,12 @@ const DashboardContent: React.FC = () => {
 };
 
 export default function DashboardPage() {
-  const { user, loading, initialized } = useAuth();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
     console.log('📊 Dashboard Page: Mounted with auth state', {
       hasUser: !!user,
       loading,
-      initialized,
       userId: user?.id,
       currentURL: window.location.href
     });
@@ -73,7 +72,7 @@ export default function DashboardPage() {
 
     window.addEventListener('popstate', handleRouteChange);
     return () => window.removeEventListener('popstate', handleRouteChange);
-  }, [user, loading, initialized]);
+  }, [user, loading]);
 
   return (
     <ProtectedRoute requireAuth={true}>

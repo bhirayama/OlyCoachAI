@@ -1,14 +1,25 @@
 'use client';
 
 import React from 'react';
-import { useRequireAuth } from '@/hooks/useAuth';
-import { PageLoadingSpinner } from '@/components/LoadingSpinner';
+import { useAuth } from '@/hooks/useAuth';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 export default function OnboardingPage() {
-  const { user, loading } = useRequireAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
-    return <PageLoadingSpinner text="Loading onboarding..." />;
+    return (
+      <div className="min-h-screen bg-navy-primary flex items-center justify-center">
+        <LoadingSpinner size="lg" />
+        <p className="mt-4 text-text-secondary">Loading onboarding...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    // Redirect to home if not authenticated
+    window.location.href = '/';
+    return null;
   }
 
   return (
@@ -19,7 +30,7 @@ export default function OnboardingPage() {
             Welcome to Olympic Weightlifting AI
           </h1>
           <p className="text-xl text-gray-300 mb-8">
-            Let's set up your personalized training program
+            Let&apos;s set up your personalized training program
           </p>
           <div className="bg-white rounded-xl p-8">
             <p className="text-gray-600">

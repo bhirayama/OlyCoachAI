@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { circuitBreaker } from '@/utils/redirectCircuitBreaker';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -20,7 +19,7 @@ const LoadingSpinner: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }
   return (
     <div className="flex items-center justify-center">
       <div
-        className={`border-electric-blue/30 border-t-electric-blue rounded-full animate-spin ${sizeClasses[size]}`}
+        className={`border-electric/30 border-t-electric rounded-full animate-spin ${sizeClasses[size]}`}
       />
     </div>
   );
@@ -31,68 +30,56 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   redirectTo = '/',
   requireAuth = true
 }) => {
-  const { user, loading, initialized, error } = useAuth();
+  const { user, loading, error } = useAuth();
   const [shouldRender, setShouldRender] = useState(false);
   const [redirectAttempted, setRedirectAttempted] = useState(false);
 
   useEffect(() => {
     console.log('🛡️ ProtectedRoute: State check', {
-      initialized,
       hasUser: !!user,
       loading,
       requireAuth,
-      shouldRender,
       redirectAttempted,
       currentPath: window.location.pathname
     });
 
-    // Don't do anything until auth is initialized
-    if (!initialized) {
-      console.log('🛡️ ProtectedRoute: Waiting for auth initialization');
+    // Don't do anything while loading
+    if (loading) {
       setShouldRender(false);
       return;
     }
 
-    // Auth is initialized, make decisions
+    // Auth is loaded, make decisions
     if (requireAuth && !user) {
       console.log('🛡️ ProtectedRoute: Auth required but no user found');
       setShouldRender(false);
 
       if (!redirectAttempted) {
         console.log('🛡️ ProtectedRoute: Attempting redirect to:', redirectTo);
+        setRedirectAttempted(true);
 
-        // Use circuit breaker
-        if (circuitBreaker.logRedirect(redirectTo, 'ProtectedRoute')) {
-          setRedirectAttempted(true);
-
-          // Use window.location instead of router to force navigation
-          setTimeout(() => {
-            window.location.href = redirectTo;
-          }, 50);
-        } else {
-          // Circuit breaker blocked redirect - show error state
-          setShouldRender(false);
-        }
+        // Simple redirect - no circuit breaker
+        setTimeout(() => {
+          window.location.href = redirectTo;
+        }, 50);
       }
     } else if (requireAuth && user) {
       console.log('🛡️ ProtectedRoute: User authenticated, rendering content');
       setShouldRender(true);
-      setRedirectAttempted(false); // Reset for future use
+      setRedirectAttempted(false);
     } else if (!requireAuth) {
       console.log('🛡️ ProtectedRoute: Public route, rendering content');
       setShouldRender(true);
     }
-  }, [user, initialized, loading, redirectTo, requireAuth, redirectAttempted]);
+  }, [user, loading, redirectTo, requireAuth, redirectAttempted]);
 
   // Show loading while auth initializes
-  if (!initialized || loading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-navy-primary flex items-center justify-center">
         <div className="text-center">
           <LoadingSpinner size="lg" />
-          <p className="mt-4 text-text-secondary">
-            {!initialized ? 'Initializing authentication...' : 'Loading...'}
-          </p>
+          <p className="mt-4 text-text-secondary">Loading...</p>
         </div>
       </div>
     );
@@ -109,11 +96,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           <p className="text-text-secondary mb-6">{error}</p>
           <button
             onClick={() => {
-              circuitBreaker.reset();
               setRedirectAttempted(false);
               window.location.reload();
             }}
-            className="bg-electric-blue text-white px-4 py-2 rounded hover:bg-electric-blue/90"
+            className="bg-electric text-white px-4 py-2 rounded hover:bg-electric/90"
           >
             Retry
           </button>

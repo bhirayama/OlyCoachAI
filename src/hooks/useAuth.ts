@@ -1,197 +1,164 @@
 "use client";
 
-import { useEffect, useState, useCallback } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { useEffect, useState } from 'react';
+import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { circuitBreaker } from '@/utils/redirectCircuitBreaker';
 
-interface AuthState {
-  user: User | null;
-  session: Session | null;
-  loading: boolean;
-  error: string | null;
-  initialized: boolean;
+interface AuthResult {
+  success: boolean;
+  error?: string;
 }
 
 export const useAuth = () => {
-  const [authState, setAuthState] = useState<AuthState>({
-    user: null,
-    session: null,
-    loading: true,
-    error: null,
-    initialized: false
-  });
-
-  const debugLog = useCallback((message: string, data?: any) => {
-    console.log(`🔐 Auth Debug: ${message}`, data || '');
-  }, []);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
+    console.log('🔐 Auth Debug: Initializing');
 
-    const initializeAuth = async () => {
-      debugLog('Starting auth initialization');
-
+    // Get initial session
+    const getInitialSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
 
-        if (!mounted) {
-          debugLog('Component unmounted during session fetch');
-          return;
-        }
-
         if (error) {
-          debugLog('Session fetch error:', error);
-          setAuthState({
-            user: null,
-            session: null,
-            loading: false,
-            error: error.message,
-            initialized: true
-          });
-          return;
+          console.log('🔐 Auth Debug: Session error', error.message);
+          setError(error.message);
+        } else {
+          console.log('🔐 Auth Debug: Initial session', { user: !!session?.user });
+          setUser(session?.user ?? null);
         }
-
-        debugLog('Initial session state:', {
-          hasSession: !!session,
-          userId: session?.user?.id,
-          expiresAt: session?.expires_at,
-          currentURL: window.location.href
-        });
-
-        setAuthState({
-          user: session?.user ?? null,
-          session,
-          loading: false,
-          error: null,
-          initialized: true
-        });
-
-      } catch (error) {
-        debugLog('Auth initialization failed:', error);
-        if (mounted) {
-          setAuthState({
-            user: null,
-            session: null,
-            loading: false,
-            error: error instanceof Error ? error.message : 'Auth failed',
-            initialized: true
-          });
-        }
+      } catch (err) {
+        console.log('🔐 Auth Debug: Initialization failed', err);
+        setError('Failed to initialize auth');
+      } finally {
+        setLoading(false);
       }
     };
 
-    initializeAuth();
+    getInitialSession();
 
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        debugLog('Auth state change event:', {
-          event,
-          hasSession: !!session,
-          userId: session?.user?.id,
-          timestamp: new Date().toISOString(),
-          currentURL: window.location.href
-        });
-
-        if (!mounted) {
-          debugLog('Component unmounted during auth change');
-          return;
-        }
-
-        setAuthState(prev => ({
-          user: session?.user ?? null,
-          session,
-          loading: false,
-          error: null,
-          initialized: true
-        }));
+      (event, session) => {
+        console.log('🔐 Auth Debug: State change', { event, user: !!session?.user });
+        setUser(session?.user ?? null);
+        setError(null);
+        setLoading(false);
       }
     );
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-      debugLog('Auth cleanup completed');
-    };
-  }, [debugLog]);
+    return () => subscription.unsubscribe();
+  }, []);
 
-  const signOut = async () => {
-    debugLog('Sign out initiated');
+  const signIn = async (email: string, password: string): Promise<AuthResult> => {
+    console.log('🔐 Auth Debug: Sign in attempt', { email });
+
     try {
-      setAuthState(prev => ({ ...prev, loading: true, error: null }));
+      setError(null);
 
-      const { error } = await supabase.auth.signOut();
-
-      if (error) {
-        debugLog('Sign out error:', error);
-        setAuthState(prev => ({
-          ...prev,
-          error: error.message,
-          loading: false
-        }));
-        return { success: false, error: error.message };
-      }
-
-      debugLog('Sign out successful');
-
-      // Use circuit breaker for sign out redirect
-      if (circuitBreaker.logRedirect('/', 'signOut')) {
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 100);
-      }
-
-      return { success: true };
-    } catch (error) {
-      debugLog('Unexpected sign out error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Sign out failed';
-      setAuthState(prev => ({
-        ...prev,
-        error: errorMessage,
-        loading: false
-      }));
-      return { success: false, error: errorMessage };
-    }
-  };
-
-  const signIn = async (email: string, password: string) => {
-    debugLog('Sign in attempt for:', email);
-    try {
-      setAuthState(prev => ({ ...prev, loading: true, error: null }));
-
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
       if (error) {
-        debugLog('Sign in error:', error);
-        setAuthState(prev => ({
-          ...prev,
-          error: error.message,
-          loading: false
-        }));
+        console.log('🔐 Auth Debug: Sign in failed', error.message);
+        setError(error.message);
         return { success: false, error: error.message };
       }
 
-      debugLog('Sign in successful:', data.user?.id);
-      return { success: true, user: data.user };
-    } catch (error) {
-      debugLog('Unexpected sign in error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Sign in failed';
-      setAuthState(prev => ({
-        ...prev,
-        error: errorMessage,
-        loading: false
-      }));
+      console.log('🔐 Auth Debug: Sign in success');
+      return { success: true };
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Sign in failed';
+      console.log('🔐 Auth Debug: Sign in error', errorMessage);
+      setError(errorMessage);
       return { success: false, error: errorMessage };
     }
   };
 
+  const signUp = async (email: string, password: string): Promise<AuthResult> => {
+    console.log('🔐 Auth Debug: Sign up attempt', { email });
+
+    try {
+      setError(null);
+
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`
+        }
+      });
+
+      if (error) {
+        console.log('🔐 Auth Debug: Sign up failed', error.message);
+        setError(error.message);
+        return { success: false, error: error.message };
+      }
+
+      if (data.user && !data.session) {
+        console.log('🔐 Auth Debug: Sign up success - email confirmation required');
+        return { success: true, error: 'Please check your email to confirm your account' };
+      }
+
+      console.log('🔐 Auth Debug: Sign up success - auto confirmed');
+      return { success: true };
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Sign up failed';
+      console.log('🔐 Auth Debug: Sign up error', errorMessage);
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  const signOut = async (): Promise<AuthResult> => {
+    console.log('🔐 Auth Debug: Sign out initiated');
+
+    try {
+      setError(null);
+
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        console.log('🔐 Auth Debug: Sign out failed', error.message);
+        setError(error.message);
+        return { success: false, error: error.message };
+      }
+
+      console.log('🔐 Auth Debug: Sign out success');
+
+      // Simple redirect - no circuit breaker
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 100);
+
+      return { success: true };
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Sign out failed';
+      console.log('🔐 Auth Debug: Sign out error', errorMessage);
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  const clearError = () => {
+    setError(null);
+  };
+
   return {
-    ...authState,
-    signOut,
+    user,
+    loading,
+    error,
     signIn,
-    isAuthenticated: authState.initialized && !!authState.user
+    signUp,
+    signOut,
+    clearError,
+    isAuthenticated: !!user
   };
 };
