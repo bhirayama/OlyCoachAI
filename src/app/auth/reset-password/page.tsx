@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 
 export default function ResetPasswordPage() {
-  const { updatePassword, user, isAuthenticated } = useAuth();
+  const { updatePassword } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -23,94 +23,40 @@ export default function ResetPasswordPage() {
   const [isValidToken, setIsValidToken] = useState<boolean | null>(null);
   const [resetComplete, setResetComplete] = useState(false);
 
-  // ✅ FIXED: Handle both PKCE and direct token flows
+  // ✅ SIMPLIFIED: Token validation
   useEffect(() => {
     const validateResetToken = async () => {
-      console.log('🔐 ResetPassword: Starting PKCE-compatible token validation');
+      console.log('🔐 ResetPassword: Starting simplified token validation');
 
       try {
-        // Get all possible URL parameters
-        const accessToken = searchParams.get('access_token');
-        const refreshToken = searchParams.get('refresh_token');
-        const type = searchParams.get('type');
+        // Check for error parameters first
         const error = searchParams.get('error');
         const errorDescription = searchParams.get('error_description');
 
-        console.log('🔍 ResetPassword: URL analysis:', {
-          hasAccessToken: !!accessToken,
-          hasRefreshToken: !!refreshToken,
-          type,
-          error,
-          errorDescription,
-          allParams: Object.fromEntries(searchParams.entries()),
-          fullURL: window.location.href
-        });
-
-        // Handle error in URL (expired/invalid token)
         if (error) {
-          console.log('❌ ResetPassword: Error in URL parameters:', error, errorDescription);
+          console.log('❌ ResetPassword: Error in URL:', error, errorDescription);
           setIsValidToken(false);
-
-          if (error === 'access_denied' || errorDescription?.includes('expired')) {
-            setMessage('Reset link has expired. Please request a new password reset.');
-          } else {
-            setMessage('Invalid reset link. Please request a new password reset.');
-          }
-
+          setMessage(errorDescription || 'Reset link is invalid or expired.');
           setMessageType('error');
           setIsValidating(false);
           return;
         }
 
-        // ✅ Method 1: Direct token validation (if tokens are in URL)
-        if (accessToken && refreshToken && type === 'recovery') {
-          console.log('🔍 ResetPassword: Direct token flow detected');
-
-          const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken
-          });
-
-          if (sessionError) {
-            console.error('❌ ResetPassword: Session validation failed:', sessionError);
-            setIsValidToken(false);
-            setMessage('Reset link is no longer valid. Please request a new one.');
-            setMessageType('error');
-            setIsValidating(false);
-            return;
-          }
-
-          if (sessionData.session && sessionData.user) {
-            console.log('✅ ResetPassword: Direct token validation successful');
-            setIsValidToken(true);
-            setMessage('Reset link verified. Please enter your new password.');
-            setMessageType('info');
-            setIsValidating(false);
-            return;
-          }
-        }
-
-        // ✅ Method 2: Check existing session (after PKCE redirect)
-        console.log('🔍 ResetPassword: Checking existing session (PKCE flow)');
-
+        // ✅ SIMPLIFIED: Just check if user has a valid session
+        // When Supabase processes a valid reset token, it automatically creates a session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (sessionError) {
-          console.error('❌ ResetPassword: Session check failed:', sessionError);
+          console.error('❌ ResetPassword: Session error:', sessionError);
           setIsValidToken(false);
-          setMessage('Failed to validate reset session. Please request a new reset link.');
+          setMessage('Failed to validate reset link. Please request a new one.');
           setMessageType('error');
           setIsValidating(false);
           return;
         }
 
         if (session && session.user) {
-          console.log('✅ ResetPassword: Valid session found (PKCE successful)', {
-            userId: session.user.id,
-            email: session.user.email,
-            provider: session.user.app_metadata?.provider
-          });
-
+          console.log('✅ ResetPassword: Valid session found - reset token is valid');
           setIsValidToken(true);
           setMessage('Reset link verified. Please enter your new password.');
           setMessageType('info');
@@ -118,53 +64,28 @@ export default function ResetPasswordPage() {
           return;
         }
 
-        // ✅ Method 3: Listen for auth state changes (PKCE in progress)
-        console.log('🔍 ResetPassword: Waiting for PKCE auth state change...');
+        // ✅ SIMPLIFIED: If no session, wait briefly for Supabase to process the token
+        console.log('🔍 ResetPassword: No immediate session, waiting for token processing...');
 
-        // Wait up to 5 seconds for auth state to update
-        let authTimeout: NodeJS.Timeout;
+        setTimeout(async () => {
+          const { data: { session: delayedSession } } = await supabase.auth.getSession();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          (event, session) => {
-            console.log('🔐 ResetPassword: Auth state change:', event, !!session);
-
-            if (authTimeout) clearTimeout(authTimeout);
-
-            if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
-              if (session && session.user) {
-                console.log('✅ ResetPassword: Auth state updated with valid session');
-                setIsValidToken(true);
-                setMessage('Reset link verified. Please enter your new password.');
-                setMessageType('info');
-                setIsValidating(false);
-                subscription.unsubscribe();
-                return;
-              }
-            }
-
-            if (event === 'SIGNED_OUT') {
-              console.log('❌ ResetPassword: User signed out during validation');
-              setIsValidToken(false);
-              setMessage('Reset session expired. Please request a new reset link.');
-              setMessageType('error');
-              setIsValidating(false);
-              subscription.unsubscribe();
-            }
+          if (delayedSession && delayedSession.user) {
+            console.log('✅ ResetPassword: Session found after delay');
+            setIsValidToken(true);
+            setMessage('Reset link verified. Please enter your new password.');
+            setMessageType('info');
+          } else {
+            console.log('❌ ResetPassword: No session after delay - invalid/expired token');
+            setIsValidToken(false);
+            setMessage('Reset link is invalid or has expired. Please request a new one.');
+            setMessageType('error');
           }
-        );
-
-        // Set timeout for auth state detection
-        authTimeout = setTimeout(() => {
-          console.log('⏰ ResetPassword: Auth state timeout - no valid session detected');
-          subscription.unsubscribe();
-          setIsValidToken(false);
-          setMessage('Reset link validation timed out. Please request a new reset link.');
-          setMessageType('error');
           setIsValidating(false);
-        }, 5000);
+        }, 2000); // Wait 2 seconds for token processing
 
       } catch (error) {
-        console.error('❌ ResetPassword: Token validation exception:', error);
+        console.error('❌ ResetPassword: Validation exception:', error);
         setIsValidToken(false);
         setMessage('Failed to validate reset link. Please try again.');
         setMessageType('error');
@@ -202,7 +123,6 @@ export default function ResetPasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     console.log('🔐 ResetPassword: Form submitted');
 
     // Validation
@@ -259,7 +179,7 @@ export default function ResetPasswordPage() {
           <div className="w-8 h-8 border-4 border-electric-blue/30 border-t-electric-blue rounded-full animate-spin mx-auto" />
           <p className="text-text-secondary">Verifying reset link...</p>
           <p className="text-xs text-text-disabled">
-            This may take a few seconds for PKCE verification
+            Processing your password reset token
           </p>
         </div>
       </div>
@@ -293,13 +213,13 @@ export default function ResetPasswordPage() {
             </p>
           </div>
 
-          {/* Debug information */}
+          {/* Debug information - REMOVE IN PRODUCTION */}
           <div className="bg-navy-primary/30 rounded-lg p-4 space-y-2">
             <h4 className="text-text-primary font-semibold text-sm">
               Debug Info:
             </h4>
             <div className="text-xs text-text-disabled text-left">
-              <p>URL: {window.location.href}</p>
+              <p>URL: {typeof window !== 'undefined' ? window.location.href : 'N/A'}</p>
               <p>Params: {searchParams.toString()}</p>
             </div>
           </div>
@@ -457,10 +377,10 @@ export default function ResetPasswordPage() {
           {/* Status Message */}
           {message && (
             <div className={`rounded-lg p-4 flex items-start gap-3 ${messageType === 'success'
-                ? 'bg-green-900/20 border border-green-500/30 text-green-400'
-                : messageType === 'error'
-                  ? 'bg-red-900/20 border border-red-500/30 text-red-400'
-                  : 'bg-blue-900/20 border border-blue-500/30 text-blue-400'
+              ? 'bg-green-900/20 border border-green-500/30 text-green-400'
+              : messageType === 'error'
+                ? 'bg-red-900/20 border border-red-500/30 text-red-400'
+                : 'bg-blue-900/20 border border-blue-500/30 text-blue-400'
               }`}>
               {messageType === 'success' ? (
                 <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
