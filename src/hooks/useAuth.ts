@@ -203,6 +203,60 @@ export const useAuth = () => {
     }
   }, []);
 
+  // ✅ NEW: Password reset request
+  const requestPasswordReset = useCallback(async (email: string): Promise<AuthResult> => {
+    console.log('🔐 Auth: Password reset request for:', email);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`
+      });
+
+      if (error) {
+        console.error('❌ Auth: Password reset request failed:', error.message);
+        return { success: false, error: error.message };
+      }
+
+      console.log('✅ Auth: Password reset email sent');
+      return { success: true };
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Password reset request failed';
+      console.error('❌ Auth: Password reset request error:', errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }, []);
+
+  // ✅ NEW: Password reset completion
+  const updatePassword = useCallback(async (newPassword: string): Promise<AuthResult> => {
+    console.log('🔐 Auth: Updating password');
+
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        console.error('❌ Auth: Password update failed:', error.message);
+        return { success: false, error: error.message };
+      }
+
+      console.log('✅ Auth: Password updated successfully');
+
+      // Update auth state with the new user data
+      if (data.user) {
+        updateAuthState(data.user, false, null);
+      }
+
+      return { success: true };
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Password update failed';
+      console.error('❌ Auth: Password update error:', errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }, [updateAuthState]);
+
   const resendVerification = useCallback(async (): Promise<AuthResult> => {
     if (!state.user?.email) {
       return { success: false, error: 'No email address found' };
@@ -284,7 +338,11 @@ export const useAuth = () => {
     signOut,
     resendVerification,
     clearError,
-    checkVerificationStatus
+    checkVerificationStatus,
+
+    // ✅ NEW: Password reset methods
+    requestPasswordReset,
+    updatePassword
   };
 };
 

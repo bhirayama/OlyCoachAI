@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { X, Eye, EyeOff, AlertCircle, Mail, CheckCircle, Clock } from 'lucide-react';
+import Link from 'next/link';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -326,6 +327,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </p>
                   )}
                 </div>
+              </div>
+
+              {/* Forgot Password Link */}
+              <div className="text-right">
+                <Link
+                  href="/auth/forgot-password"
+                  onClick={() => onClose()} // Close modal when navigating
+                  className="text-sm text-electric-blue hover:text-electric-blue/80 transition-colors"
+                >
+                  Forgot password?
+                </Link>
               </div>
 
               {/* Error Display */}
