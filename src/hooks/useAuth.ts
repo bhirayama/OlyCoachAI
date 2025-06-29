@@ -1,4 +1,3 @@
-// src/hooks/useAuth.ts - FIXED: No more infinite loops
 "use client";
 
 import { useEffect, useState, useCallback } from 'react';
@@ -29,7 +28,6 @@ export const useAuth = () => {
     requiresVerification: false
   });
 
-  // ✅ FIXED: Use useCallback to prevent function recreation
   const updateAuthState = useCallback((user: User | null, loading: boolean = false, error: string | null = null) => {
     const emailConfirmed = user?.email_confirmed_at ? true : false;
     const isAuthenticated = !!user && emailConfirmed;
@@ -43,36 +41,27 @@ export const useAuth = () => {
       isAuthenticated,
       requiresVerification
     });
-  }, []); // ✅ FIXED: Empty dependency array since it doesn't depend on anything
+  }, []);
 
-  // ✅ FIXED: Proper useEffect with correct dependencies
   useEffect(() => {
-    console.log('🔐 Auth: Initializing auth state check');
+    console.log('🔐 Auth: Initializing');
 
-    let mounted = true; // ✅ FIXED: Prevent setState on unmounted component
+    let mounted = true;
 
     const getInitialSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
 
-        if (!mounted) return; // ✅ FIXED: Don't update if unmounted
+        if (!mounted) return;
 
         if (error) {
           console.error('❌ Auth: Session error:', error);
-          setState(prev => ({
-            ...prev,
-            loading: false,
-            error: error.message,
-            user: null,
-            emailConfirmed: false,
-            isAuthenticated: false,
-            requiresVerification: false
-          }));
+          updateAuthState(null, false, error.message);
           return;
         }
 
         const user = session?.user || null;
-        console.log('🔍 Auth: Initial session loaded:', {
+        console.log('🔍 Auth: Initial session:', {
           hasUser: !!user,
           email: user?.email,
           emailConfirmed: user?.email_confirmed_at ? true : false
@@ -83,22 +72,17 @@ export const useAuth = () => {
       } catch (err) {
         if (!mounted) return;
         console.error('❌ Auth: Initialization failed:', err);
-        setState(prev => ({
-          ...prev,
-          loading: false,
-          error: 'Failed to initialize authentication'
-        }));
+        updateAuthState(null, false, 'Failed to initialize authentication');
       }
     };
 
     getInitialSession();
 
-    // ✅ FIXED: Auth state listener with proper cleanup
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (!mounted) return; // ✅ FIXED: Don't update if unmounted
+        if (!mounted) return;
 
-        console.log('🔐 Auth: State change event:', event, {
+        console.log('🔐 Auth: State change:', event, {
           hasUser: !!session?.user,
           email: session?.user?.email
         });
@@ -108,14 +92,12 @@ export const useAuth = () => {
       }
     );
 
-    // ✅ FIXED: Cleanup function
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [updateAuthState]); // ✅ FIXED: Only depends on updateAuthState
+  }, [updateAuthState]);
 
-  // ✅ FIXED: Use useCallback for all auth functions
   const signIn = useCallback(async (email: string, password: string): Promise<AuthResult> => {
     console.log('🔐 Auth: Sign in attempt for:', email);
 
@@ -127,28 +109,21 @@ export const useAuth = () => {
         password
       });
 
+      setState(prev => ({ ...prev, loading: false }));
+
       if (error) {
         console.error('❌ Auth: Sign in failed:', error.message);
-        setState(prev => ({
-          ...prev,
-          loading: false,
-          error: error.message
-        }));
+        setState(prev => ({ ...prev, error: error.message }));
         return { success: false, error: error.message };
       }
 
-      // ✅ FIXED: Don't manually update state here, let onAuthStateChange handle it
       console.log('✅ Auth: Sign in successful');
       return { success: true };
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Sign in failed';
       console.error('❌ Auth: Sign in error:', errorMessage);
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        error: errorMessage
-      }));
+      setState(prev => ({ ...prev, loading: false, error: errorMessage }));
       return { success: false, error: errorMessage };
     }
   }, []);
@@ -167,13 +142,11 @@ export const useAuth = () => {
         }
       });
 
+      setState(prev => ({ ...prev, loading: false }));
+
       if (error) {
         console.error('❌ Auth: Sign up failed:', error.message);
-        setState(prev => ({
-          ...prev,
-          loading: false,
-          error: error.message
-        }));
+        setState(prev => ({ ...prev, error: error.message }));
         return { success: false, error: error.message };
       }
 
@@ -187,28 +160,18 @@ export const useAuth = () => {
       });
 
       if (user && !session) {
-        // Email confirmation required
         console.log('📧 Auth: Email confirmation required');
         updateAuthState(user, false, null);
-        return {
-          success: true,
-          error: 'CHECK_EMAIL'
-        };
+        return { success: true, error: 'CHECK_EMAIL' };
       }
 
-      // Auto-confirmed
       console.log('✅ Auth: Sign up auto-confirmed');
-      updateAuthState(user, false, null);
       return { success: true };
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Sign up failed';
       console.error('❌ Auth: Sign up error:', errorMessage);
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        error: errorMessage
-      }));
+      setState(prev => ({ ...prev, loading: false, error: errorMessage }));
       return { success: false, error: errorMessage };
     }
   }, [updateAuthState]);
@@ -226,8 +189,6 @@ export const useAuth = () => {
       }
 
       console.log('✅ Auth: Sign out successful');
-
-      // ✅ FIXED: Don't manually update state, let onAuthStateChange handle it
       setTimeout(() => {
         window.location.href = '/';
       }, 100);
@@ -306,7 +267,6 @@ export const useAuth = () => {
     setState(prev => ({ ...prev, error: null }));
   }, []);
 
-  // ✅ FIXED: Return stable object
   return {
     // Core state
     user: state.user,
@@ -318,7 +278,7 @@ export const useAuth = () => {
     isAuthenticated: state.isAuthenticated,
     requiresVerification: state.requiresVerification,
 
-    // Methods (all memoized with useCallback)
+    // Methods
     signIn,
     signUp,
     signOut,
