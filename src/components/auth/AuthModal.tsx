@@ -1,9 +1,9 @@
-// src/components/auth/AuthModal.tsx - Enhanced with Fixed Colors & Better UX
+// src/components/auth/AuthModal.tsx - Enhanced with Better Error Handling & UX
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { X, Eye, EyeOff, AlertCircle, Mail, CheckCircle, Clock } from 'lucide-react';
+import { X, Eye, EyeOff, AlertCircle, Mail, CheckCircle, Clock, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 interface AuthModalProps {
@@ -14,12 +14,23 @@ interface AuthModalProps {
 
 type ModalState = 'auth' | 'check-email' | 'resend-verification';
 
+interface FormErrors {
+  email?: string;
+  password?: string;
+  general?: string;
+}
+
+interface FormTouched {
+  email: boolean;
+  password: boolean;
+}
+
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   initialMode = 'login'
 }) => {
-  const { signUp, signIn, resendVerification, error, loading, clearError } = useAuth();
+  const { signUp, signIn, resendVerification, error, errorType, canRetry, loading, clearError, retryLastAction, checkNetworkStatus } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
   const [modalState, setModalState] = useState<ModalState>('auth');
   const [email, setEmail] = useState('');
@@ -28,6 +39,49 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [verificationEmail, setVerificationEmail] = useState('');
   const [resendMessage, setResendMessage] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Form validation state
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [touched, setTouched] = useState<FormTouched>({ email: false, password: false });
+  const [isFormValid, setIsFormValid] = useState(false);
+
+  // Network status
+  const [isOnline, setIsOnline] = useState(true);
+  const [isCheckingNetwork, setIsCheckingNetwork] = useState(false);
+
+  // Validation functions
+  const validateEmail = (email: string): string | undefined => {
+    if (!email) return 'Email is required';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return 'Please enter a valid email address';
+    return undefined;
+  };
+
+  const validatePassword = (password: string, isSignup: boolean = false): string | undefined => {
+    if (!password) return 'Password is required';
+    if (password.length < 6) return 'Password must be at least 6 characters';
+
+    if (isSignup) {
+      if (!/(?=.*[a-z])/.test(password)) return 'Password must contain at least one lowercase letter';
+      if (!/(?=.*[A-Z])/.test(password)) return 'Password must contain at least one uppercase letter';
+      if (!/(?=.*\d)/.test(password)) return 'Password must contain at least one number';
+    }
+
+    return undefined;
+  };
+
+  // Real-time form validation
+  useEffect(() => {
+    const emailError = touched.email ? validateEmail(email) : undefined;
+    const passwordError = touched.password ? validatePassword(password, mode === 'signup') : undefined;
+
+    setFormErrors({
+      email: emailError,
+      password: passwordError
+    });
+
+    setIsFormValid(!emailError && !passwordError && email && password);
+  }, [email, password, mode, touched]);
 
   // Reset form when modal opens/closes or mode changes
   useEffect(() => {
@@ -40,9 +94,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setVerificationEmail('');
       setResendMessage('');
       setResendCooldown(0);
+      setFormErrors({});
+      setTouched({ email: false, password: false });
+      setIsFormValid(false);
       clearError();
     }
   }, [isOpen, initialMode, clearError]);
+
+  // Check network status
+  useEffect(() => {
+    const updateNetworkStatus = () => {
+      setIsOnline(navigator.onLine);
+    };
+
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+
+    return () => {
+      window.removeEventListener('online', updateNetworkStatus);
+      window.removeEventListener('offline', updateNetworkStatus);
+    };
+  }, []);
 
   // Close modal on escape key
   useEffect(() => {
@@ -74,9 +146,44 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
+  // Handle form field blur for validation
+  const handleBlur = (field: keyof FormTouched) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+
+  // Handle input changes
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEmail(e.target.value);
+    // Clear error when user starts typing
+    if (formErrors.email && e.target.value) {
+      setFormErrors(prev => ({ ...prev, email: undefined }));
+    }
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
+    // Clear error when user starts typing
+    if (formErrors.password && e.target.value) {
+      setFormErrors(prev => ({ ...prev, password: undefined }));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('🔐 AuthModal: Form submitted', { mode, email });
+    console.log('🔐 AuthModal: Form submitted', { mode, email, isFormValid });
+
+    // Mark all fields as touched for validation
+    setTouched({ email: true, password: true });
+
+    // Final validation check
+    const emailError = validateEmail(email);
+    const passwordError = validatePassword(password, mode === 'signup');
+
+    if (emailError || passwordError) {
+      setFormErrors({ email: emailError, password: passwordError });
+      return;
+    }
+
     clearError();
 
     if (mode === 'signup') {
@@ -84,11 +191,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       console.log('🔐 AuthModal: Signup result', result);
 
       if (result.success && result.error === 'CHECK_EMAIL') {
-        // ✅ ENHANCED: Show email verification screen
         setVerificationEmail(email);
         setModalState('check-email');
       } else if (result.success) {
-        // Auto-confirmed signup, close modal and redirect
         onClose();
         window.location.href = '/dashboard';
       }
@@ -97,10 +202,46 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       console.log('🔐 AuthModal: Signin result', result);
 
       if (result.success) {
-        // ✅ FIXED: Close modal and redirect to dashboard immediately
         onClose();
         window.location.href = '/dashboard';
       }
+    }
+  };
+
+  const handleRetry = async () => {
+    console.log('🔄 AuthModal: Retrying authentication');
+    setFormErrors({});
+    clearError();
+
+    const result = await retryLastAction(mode, email, password);
+
+    if (result.success && mode === 'signup' && result.error === 'CHECK_EMAIL') {
+      setVerificationEmail(email);
+      setModalState('check-email');
+    } else if (result.success) {
+      onClose();
+      window.location.href = '/dashboard';
+    }
+  };
+
+  const handleNetworkCheck = async () => {
+    console.log('🌐 AuthModal: Checking network status');
+    setIsCheckingNetwork(true);
+
+    try {
+      const networkStatus = await checkNetworkStatus();
+      setIsOnline(networkStatus);
+
+      if (networkStatus) {
+        // Network is back, clear network-related errors
+        if (errorType === 'network') {
+          clearError();
+        }
+      }
+    } catch (err) {
+      console.error('Network check failed:', err);
+    } finally {
+      setIsCheckingNetwork(false);
     }
   };
 
@@ -114,7 +255,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     if (result.success) {
       setResendMessage('✅ New verification email sent! Check your inbox.');
-      setResendCooldown(60); // 60 second cooldown
+      setResendCooldown(60);
     } else {
       setResendMessage(`❌ Failed to resend: ${result.error}`);
     }
@@ -122,9 +263,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleBackToAuth = () => {
     setModalState('auth');
-    setMode('login'); // Switch to login after email verification attempt
+    setMode('login');
     setResendMessage('');
     setResendCooldown(0);
+    setFormErrors({});
+    setTouched({ email: false, password: false });
     clearError();
   };
 
@@ -134,7 +277,91 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setEmail('');
     setPassword('');
     setShowPassword(false);
+    setFormErrors({});
+    setTouched({ email: false, password: false });
+    setIsFormValid(false);
     clearError();
+  };
+
+  // Error display component with enhanced styling
+  const ErrorDisplay: React.FC<{ error: string; errorType: string | null; canRetry: boolean }> = ({
+    error,
+    errorType,
+    canRetry
+  }) => {
+    const getErrorStyle = () => {
+      switch (errorType) {
+        case 'network':
+          return 'bg-orange-900/20 border-orange-500/30 text-orange-400';
+        case 'rate_limit':
+          return 'bg-yellow-900/20 border-yellow-500/30 text-yellow-400';
+        case 'validation':
+          return 'bg-blue-900/20 border-blue-500/30 text-blue-400';
+        case 'auth':
+          return 'bg-red-900/20 border-red-500/30 text-red-400';
+        default:
+          return 'bg-red-900/20 border-red-500/30 text-red-400';
+      }
+    };
+
+    const getErrorIcon = () => {
+      switch (errorType) {
+        case 'network':
+          return <WifiOff className="w-5 h-5 flex-shrink-0 mt-0.5" />;
+        case 'rate_limit':
+          return <Clock className="w-5 h-5 flex-shrink-0 mt-0.5" />;
+        default:
+          return <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />;
+      }
+    };
+
+    return (
+      <div className={`rounded-lg p-4 flex items-start space-x-3 ${getErrorStyle()}`}>
+        {getErrorIcon()}
+        <div className="flex-1">
+          <div className="text-sm font-medium">{error}</div>
+          {canRetry && (
+            <div className="mt-2 flex gap-2">
+              {errorType === 'network' ? (
+                <>
+                  <button
+                    onClick={handleNetworkCheck}
+                    disabled={isCheckingNetwork}
+                    className="text-xs bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
+                  >
+                    {isCheckingNetwork ? (
+                      <div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Wifi className="w-3 h-3" />
+                    )}
+                    {isCheckingNetwork ? 'Checking...' : 'Check Connection'}
+                  </button>
+                  {isOnline && (
+                    <button
+                      onClick={handleRetry}
+                      disabled={loading}
+                      className="text-xs bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Try Again
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button
+                  onClick={handleRetry}
+                  disabled={loading}
+                  className="text-xs bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Try Again
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // Don't render if not open
@@ -150,13 +377,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         onClick={onClose}
       />
 
-      {/* Modal - FIXED: Use proper color classes */}
+      {/* Modal */}
       <div className="relative bg-slate-800/95 backdrop-blur-sm rounded-xl max-w-md w-full border border-slate-700/50 shadow-2xl">
 
-        {/* ✅ EMAIL VERIFICATION STATE */}
+        {/* Network Status Indicator */}
+        {!isOnline && (
+          <div className="bg-orange-600 text-white px-4 py-2 text-sm text-center rounded-t-xl">
+            <WifiOff className="w-4 h-4 inline mr-2" />
+            No internet connection
+          </div>
+        )}
+
+        {/* EMAIL VERIFICATION STATE */}
         {modalState === 'check-email' && (
           <>
-            {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-slate-700/50">
               <h2 className="text-2xl font-bold text-white">Check Your Email</h2>
               <button
@@ -168,14 +402,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
             </div>
 
-            {/* Email Verification Content */}
             <div className="p-6 space-y-6 text-center">
-              {/* Icon */}
               <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto">
                 <Mail className="w-8 h-8 text-blue-400" />
               </div>
 
-              {/* Message */}
               <div className="space-y-2">
                 <h3 className="text-xl font-semibold text-white">
                   Verification Email Sent
@@ -188,7 +419,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </p>
               </div>
 
-              {/* Instructions */}
               <div className="bg-slate-900/50 rounded-lg p-4 text-left space-y-2">
                 <h4 className="text-white font-semibold text-sm flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-400" />
@@ -201,7 +431,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </ol>
               </div>
 
-              {/* Resend Section */}
               <div className="space-y-3">
                 <button
                   onClick={handleResendVerification}
@@ -236,7 +465,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 )}
               </div>
 
-              {/* Back to Sign In */}
               <div className="pt-4 border-t border-slate-700/50">
                 <button
                   onClick={handleBackToAuth}
@@ -249,10 +477,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </>
         )}
 
-        {/* ✅ MAIN AUTH STATE */}
+        {/* MAIN AUTH STATE */}
         {modalState === 'auth' && (
           <>
-            {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-slate-700/50">
               <h2 className="text-2xl font-bold text-white">
                 {mode === 'signup' ? 'Create Account' : 'Welcome Back'}
@@ -266,7 +493,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
             </div>
 
-            {/* Branding */}
             <div className="px-6 pt-4 text-center">
               <h3 className="text-lg font-bold text-white">
                 OLYMPIC WEIGHTLIFTING AI
@@ -276,7 +502,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </p>
             </div>
 
-            {/* Auth Form */}
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               <div className="space-y-4">
                 {/* Email Field */}
@@ -288,12 +513,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={handleEmailChange}
+                    onBlur={() => handleBlur('email')}
                     required
                     autoComplete="email"
-                    className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    className={`w-full px-4 py-3 bg-slate-900/50 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${formErrors.email
+                      ? 'border-red-500 focus:ring-red-500'
+                      : 'border-slate-600 focus:ring-blue-500'
+                      }`}
                     placeholder="your@email.com"
                   />
+                  {formErrors.email && (
+                    <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-4 h-4" />
+                      {formErrors.email}
+                    </p>
+                  )}
                 </div>
 
                 {/* Password Field */}
@@ -306,11 +541,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       id="password"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={handlePasswordChange}
+                      onBlur={() => handleBlur('password')}
                       required
                       autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                       minLength={6}
-                      className="w-full px-4 py-3 pr-12 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                      className={`w-full px-4 py-3 pr-12 bg-slate-900/50 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${formErrors.password
+                        ? 'border-red-500 focus:ring-red-500'
+                        : 'border-slate-600 focus:ring-blue-500'
+                        }`}
                       placeholder="Enter your password"
                     />
                     <button
@@ -321,43 +560,72 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
-                  {mode === 'signup' && (
-                    <p className="text-xs text-slate-400 mt-1">
-                      Minimum 6 characters
+                  {formErrors.password && (
+                    <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-4 h-4" />
+                      {formErrors.password}
                     </p>
+                  )}
+                  {mode === 'signup' && !formErrors.password && password && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-slate-400">Password requirements:</p>
+                      <div className="text-xs text-slate-500 space-y-0.5">
+                        <div className={`flex items-center gap-1 ${password.length >= 6 ? 'text-green-400' : ''}`}>
+                          <div className={`w-1.5 h-1.5 rounded-full ${password.length >= 6 ? 'bg-green-400' : 'bg-slate-500'}`} />
+                          At least 6 characters
+                        </div>
+                        <div className={`flex items-center gap-1 ${/(?=.*[a-z])/.test(password) ? 'text-green-400' : ''}`}>
+                          <div className={`w-1.5 h-1.5 rounded-full ${/(?=.*[a-z])/.test(password) ? 'bg-green-400' : 'bg-slate-500'}`} />
+                          Lowercase letter
+                        </div>
+                        <div className={`flex items-center gap-1 ${/(?=.*[A-Z])/.test(password) ? 'text-green-400' : ''}`}>
+                          <div className={`w-1.5 h-1.5 rounded-full ${/(?=.*[A-Z])/.test(password) ? 'bg-green-400' : 'bg-slate-500'}`} />
+                          Uppercase letter
+                        </div>
+                        <div className={`flex items-center gap-1 ${/(?=.*\d)/.test(password) ? 'text-green-400' : ''}`}>
+                          <div className={`w-1.5 h-1.5 rounded-full ${/(?=.*\d)/.test(password) ? 'bg-green-400' : 'bg-slate-500'}`} />
+                          Number
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
 
               {/* Forgot Password Link */}
-              <div className="text-right">
-                <Link
-                  href="/auth/forgot-password"
-                  onClick={() => onClose()} // Close modal when navigating
-                  className="text-sm text-electric-blue hover:text-electric-blue/80 transition-colors"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-
-              {/* Error Display */}
-              {error && (
-                <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3 flex items-start space-x-2">
-                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-red-400">{error}</div>
+              {mode === 'login' && (
+                <div className="text-right">
+                  <Link
+                    href="/auth/forgot-password"
+                    onClick={() => onClose()}
+                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    Forgot password?
+                  </Link>
                 </div>
+              )}
+
+              {/* Enhanced Error Display */}
+              {error && (
+                <ErrorDisplay
+                  error={error}
+                  errorType={errorType}
+                  canRetry={canRetry}
+                />
               )}
 
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={loading || !email || !password}
+                disabled={loading || !isFormValid || !isOnline}
                 className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
               >
                 {loading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Processing...</span>
+                    <span>
+                      {mode === 'signup' ? 'Creating Account...' : 'Signing In...'}
+                    </span>
                   </>
                 ) : (
                   <span>{mode === 'signup' ? 'Create Account' : 'Sign In'}</span>
@@ -372,7 +640,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </p>
               <button
                 onClick={handleModeSwitch}
-                className="text-blue-400 hover:text-blue-300 font-medium mt-1 transition-colors duration-200"
+                disabled={loading}
+                className="text-blue-400 hover:text-blue-300 disabled:opacity-50 font-medium mt-1 transition-colors duration-200"
               >
                 {mode === 'signup' ? 'Sign In' : 'Create Free Account'}
               </button>
